@@ -9,6 +9,12 @@ Test.m present an example, in which 791 bivariate scenarios are reduced using tw
 The first one is based on the d/d_0 ratio, where d is the Kantorovich distance after aggregating the scenarios, and d_0 is the distance between all the scenarios and a tree with only one scenario (as proposed in [1]).
 The second one needs to directly specify the number of desired scenarios for each timestep.
 
+Caveat
+=====
+The code is provided 'as is'.
+This scenario reduction technique is tought to be used in (near) real-time control, in combination with chance constraints, or to reduce the computational time of stochastic control algorithms.
+Do not use it to model tail risks, nor for design purposes, e.g. for choosing the nominal power of the backup diesel generators to avoid core meltdown of a nuclear reactor in case of national black-out. Use all the data in your possess for this task, and apply a 1.5 safety factor =)    
+
 References
 =====
 
