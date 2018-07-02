@@ -5,7 +5,7 @@ The algorithm implemented is based on the one described in [1], which rely on a 
 
 Example
 =====
-Test.m present an example, in which 791 bivariate scenarios are reduced using two different methods.
+Test.m presents an example, in which 791 bivariate scenarios are reduced using two different methods.
 The first one is based on the d/d_0 ratio, where d is the Kantorovich distance after aggregating the scenarios, and d_0 is the distance between all the scenarios and a tree with only one scenario (as proposed in [1]).
 The second one needs to directly specify the number of desired scenarios for each timestep.
 
