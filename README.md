@@ -12,4 +12,4 @@ The second one needs to directly specify the number of desired scenarios for eac
 References
 =====
 
- [[1]](https://www.mathematik.hu-berlin.de/~heitsch/ieee03ghr.pdf) *[1] N. Gröwe-Kuska, H. Heitsch, and W. Römisch, “Scenario reduction and scenario tree construction for power management problems,” in 2003 IEEE Bologna PowerTech - Conference Proceedings, 2003, vol. 3, pp. 152–158.*
+ [[1]](https://www.mathematik.hu-berlin.de/~heitsch/ieee03ghr.pdf) *N. Gröwe-Kuska, H. Heitsch, and W. Römisch, “Scenario reduction and scenario tree construction for power management problems,” in 2003 IEEE Bologna PowerTech - Conference Proceedings, 2003, vol. 3, pp. 152–158.*
