@@ -1,7 +1,8 @@
-# scenred
+# scenred 
 Code for optimal scenario tree reduction for multivariate data. 
 The code reduces a set of scenarios (obtained from sampling a multivariate distribution, or from historical data) to a scenario tree, in which each node has an associate probability, such as at each point in time, the sum of the probabilities in all the branches of the tree is equal to 1. 
 The algorithm implemented is based on the one described in [1], which rely on a greedy strategy to optimally reduce the scenarios, based on the Kantorovich distance.
+The code is implemented both in Matlab and in Python (see the python directory)
 
 Example
 =====
