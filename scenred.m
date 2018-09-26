@@ -1,4 +1,4 @@
-function [S,P,J] = scenred(samples, metric,varargin)
+function [S,P,J,Me] = scenred(samples, metric,varargin)
 %Build a scenario tree reducing N observed samplings from a multivariate
 %distribution. The algorithm is described in "Nicole Growe-Kuska,
 % Holger Heitsch and Werner Romisch - Scenario Reduction Scenario Tree 
@@ -27,6 +27,8 @@ function [S,P,J] = scenred(samples, metric,varargin)
 %          scenario
 %          J: T*n_obs matrix, indicating non-zero entries of P (if a
 %          scenario is present at a given timestep)
+%          Me: T*n_scen*n_scen matrix, containing which scenario is linked 
+%          with which at time t
 
 T = size(samples{1},1);
 n_obs = size(samples{1},2);
@@ -64,8 +66,13 @@ D = get_dist(X,metric);
 D = D + eye(size(D))*(1 + max(D(:))); % ignore self-distance (D diagonal)
 
 % generate the tolerance vector
-Tol = repmat(tol,1,T) ;
-
+if all(nodes==defaultNodes)
+    Tol = fliplr(tol./(1.5.^(T-[1:T]+1)));
+    Tol(1) = inf;
+else
+    Tol = inf(1,T);
+end
+% ;
 % initialize selected scenarios at each timestep
 J = true(T,n_obs);
 % initialize linking matrix, to keep track of which scenario has merged at
@@ -84,9 +91,10 @@ for i=fliplr(1:T) % aggregate scenarios using a backward strategy
     
     % Compute the minimum cost of approximating the current scenarios, up
     % to time i, with just one scenario
-    M = tril(D_i(J(i,:),J(i,:)));   % cross-distance matrix fr
-    M(logical(eye(size(M)))) = 0;   % do not consider self-distance
-    delta_max = min(sum(M(2:end-i,1:end-1-i)));
+    sel_idx = repmat(logical([ones(1,i),zeros(1,T-i)]),1,length(samples));
+    D_j = get_dist(X(J(i,:),sel_idx),metric);
+    D_j(logical(eye(size(D_j)))) = 0;   % do not consider self-distance
+    delta_max = min(sum(D_j));
      
     while delta_rel<Tol(i) && branches>nodes(i)
         D_i(~J(i,:),:) = inf;                         % set distance of discarded scenarios to infinity, ignoring them
@@ -128,6 +136,11 @@ end
 % Keep only scenarios which are present at the end (t==T)
 S = S(:,J(end,:)>0,:);
 P = P(:,J(end,:)>0,:);
+for i=1:T
+    Me(:,:,i) = get_dist(S(i,:,1)',metric)==0;
+end
+Me = permute(Me,[3,1,2]);
+
 end
 
 function D = get_dist(X,metric)

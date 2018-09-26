@@ -2,7 +2,6 @@
 clear
 clc
 close all
-addpath('../Data_preprocess/')
 
 %% Load scenarios of bivariate data (voltage and temperature at a given point of the distribution grid)
 load('data.mat');
@@ -16,12 +15,12 @@ plot(data{2}); title('Temperature profiles');xlabel('time [h]');ylabel('[°C]')
 
 %% Generate scenario tree 
 % specify accuracy
-[S_tol,P_tol,J_tol] = scenred(data, 'cityblock','tol',0.1); 
+[S_tol,P_tol,J_tol] = scenred(data, 'cityblock','tol',0.2); 
 do_plots(S_tol,P_tol);
 
 % specify number of nodes at each timestep
 T = size(data{1},1);    % timesteps
 N = 30;                 % number of scenarios at t==T   
-[S,P,J] = scenred(data, 'cityblock','nodes',round(linspace(1,N,T))); 
+[S,P,J,L] = scenred(data, 'cityblock','nodes',round(linspace(1,N,T))); 
 do_plots(S,P);
 
