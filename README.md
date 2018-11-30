@@ -8,7 +8,7 @@ The python verision also includes the retrieval of the graph representation of t
     _p_: probability of the node
     _v_: array of values associated with the node
 
-The graph representation is helpful when writing stochastic scenario tree controllers, since one can directly retrieve the path from each node to the root through the networkx's command _anchestors_
+The graph representation is helpful when writing stochastic scenario tree controllers, since one can directly retrieve the path from each node to the root through the networkx's command `anchestors`
 
 
 Example
