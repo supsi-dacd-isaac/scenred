@@ -214,7 +214,7 @@ def get_network(S_s,P_s):
     :return: g: a networkx graph with time, probability and values encoded with the connectivity of the nodes
     '''
 
-    g = nx.Graph()
+    g = nx.DiGraph()
     g.add_node(0, t=0, p=1, v=S_s[0, P_s[0, :] > 0, :].ravel())
 
     for t in 1 + np.arange(P_s.shape[0] - 1):
