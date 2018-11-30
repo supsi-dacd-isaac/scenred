@@ -4,11 +4,11 @@ The code reduces a set of scenarios (obtained from sampling a multivariate distr
 The algorithm implemented is based on the one described in [1], which rely on a greedy strategy to optimally reduce the scenarios, based on the Kantorovich distance.
 The code is implemented both in **Matlab** and in **Python** (see the python directory)
 The python verision also includes the retrieval of the graph representation of the scenrio tree. The graph is encoded in a networkx graph object. Each node in the graph has the following attributes: 
-    _t: time of the node
-    _p: probability of the node
-    _v: array of values associated with the node
+    _t_: time of the node
+    _p_: probability of the node
+    _v_: array of values associated with the node
 
-The graph representation is helpful when writing stochastic scenario tree controllers, since one can directly retrieve the path from each node to the root through the networkx's command _anchestors
+The graph representation is helpful when writing stochastic scenario tree controllers, since one can directly retrieve the path from each node to the root through the networkx's command _anchestors_
 
 
 Example
