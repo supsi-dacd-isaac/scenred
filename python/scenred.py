@@ -1,5 +1,15 @@
 import numpy as np
 from scipy.spatial.distance import pdist,squareform
+import matplotlib
+matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
+from matplotlib import style
+from mpl_toolkits.mplot3d import Axes3D
+from networkx.drawing.nx_agraph import graphviz_layout
+import networkx as nx
+import warnings
+from itertools import count
+
 
 def get_dist(X,metric):
     D = squareform(pdist(X,metric))
@@ -137,4 +147,105 @@ def scenred(samples, **kwargs):
 
     Me = np.swapaxes(Me,2,0)
 
-    return S, P, J, Me
+    if np.shape(S)[1]<50:
+        g = get_network(S, P)
+    else:
+        print('Warning: automatic retrieval of the network graph has been disabled because the number of '
+                         'nodes is high. If you want to get the network graph anyway, call the get_network(S,P)')
+        scenario_warning('Warning: automatic retrieval of the network graph has been disabled because the number of '
+                         'nodes is high. If you want to get the network graph anyway, call the get_network(S,P)')
+        g = []
+
+    return S, P, J, Me, g
+
+def plot_scen(S_s):
+    '''
+
+    :param S_s:
+    :return:
+    '''
+    if S_s.shape[2]==2:
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        for i in np.arange(S_s.shape[1]):
+            ax.plot(np.arange(S_s.shape[0]), np.squeeze(S_s[:, i, 0]), np.squeeze(S_s[:, i, 1]), color='k', alpha=0.1)
+    elif S_s.shape[2]==1:
+        fig = plt.figure()
+        plt.plot(np.squeeze(S_s),color='k', alpha=0.1)
+    else:
+        assert S_s.shape[2]>2, 'Error: cannot visualize more than bivariate scenarios'
+
+def plot_graph(g):
+    '''
+    Plot the networkx graph which encodes the scenario tree
+    :param g: the networkx graph which encodes the scenario tree
+    :return:
+    '''
+
+    # get unique groups
+    fig= plt.figure()
+    ax =plt.gca()
+    groups = set(np.array(list(nx.get_node_attributes(g, 'v').values()))[:, 0])
+    mapping = dict(zip(sorted(groups), count()))
+    nodes = g.nodes()
+    colors = [mapping[g.node[n]['v'][0]] for n in nodes]
+
+    # drawing nodes and edges separately so we can capture collection for colobar
+    pos = graphviz_layout(g, prog='dot')
+    # nx.draw_networkx(g,pos,with_labels=True)
+    ec = nx.draw_networkx_edges(g, pos, alpha=0.2)
+    nc = nx.draw_networkx_nodes(g, pos, nodelist=nodes, node_color=colors,
+                                with_labels=True, node_size=100, cmap=plt.cm.jet)
+    ax.set_xticks([])
+    ax.set_yticks([])
+
+def get_network(S_s,P_s):
+    '''
+    Get a network representation from the S_s and P_p matrices. The network is encoded in a networkx graph, each node
+    has the following attribute:
+    t: time of the node
+    p: probability of the node
+    v: array of values associated with the node
+
+    :param S_s: T*n_obs*n matrix, containing all the path in the scenario
+                tree
+    :param P_s: T*n_obs matrix, containing evolviong probabilities for each
+                scenario
+    :return: g: a networkx graph with time, probability and values encoded with the connectivity of the nodes
+    '''
+
+    g = nx.Graph()
+    g.add_node(0, t=0, p=1, v=S_s[0, P_s[0, :] > 0, :].ravel())
+
+    for t in 1 + np.arange(P_s.shape[0] - 1):
+        for s in np.arange(P_s.shape[1]):
+            # span all the times, starting from second point (the root node is already defined)
+            # consider current point mu, and its previous point in its scenario
+            mu = S_s[t, s, :]
+            p = P_s[t, s]
+            # if probability of current point is zero, just go on
+            if p == 0:
+                continue
+            mu_past = S_s[t - 1, s, :]
+            # get current times in the tree
+            times = np.array(list(nx.get_node_attributes(g, 't').values()))
+            # get values, filtered by current time
+            values = np.array(list(nx.get_node_attributes(g, 'v').values()))
+            values_t = values[times == t, :]
+            values_past = values[times == t - 1, :]
+            # check if values of current point s are present in the tree at current time
+            if np.any([np.array_equal(mu, a) for a in values_t]):
+                continue
+            else:
+                # find parent node
+                parent_node = [x for x, y in g.nodes(data=True) if y['t'] == t - 1 and np.array_equal(y['v'], mu_past)]
+                # create the node and add an edge from current point to its parent
+                new_node = len(g.nodes())
+                g.add_node(new_node, t=t, p=p, v=mu)
+                g.add_edge(parent_node[0], new_node)
+                #print('node %i added, with values' % (new_node), mu)
+
+    return g
+
+def scenario_warning(message):
+    warnings.warn(message)
