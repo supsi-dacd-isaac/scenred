@@ -55,7 +55,7 @@ X = [];
 S = [];
 for i=1:length(samples)
     V = samples{i};
-    V_norm = (V-mean(V,2))./(std(V,[],2)+1e-6);
+    V_norm = (V-repmat(mean(V,2),1,size(V,2)))./(repmat(std(V,[],2)+1e-6,1,size(V,2)));
     X = [X;V_norm];
     S(:,:,i) = V;
 end

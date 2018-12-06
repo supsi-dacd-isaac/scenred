@@ -83,6 +83,10 @@ def scenred(samples, **kwargs):
     else:
         Tol = infty * np.ones((1, T)).ravel()
 
+    if pars['nodes'][0] != 1:
+        print('The first number of scenarios is not 1. This will cause an error on graph retrieval. I am forcing it to 1')
+        pars['nodes'][0] = 1
+
     J = np.asanyarray(np.ones((T,n_obs)),bool)
     L = np.zeros((n_obs,n_obs))
     P = np.ones((T, n_obs)) / n_obs
@@ -158,7 +162,7 @@ def scenred(samples, **kwargs):
 
     return S, P, J, Me, g
 
-def plot_scen(S_s):
+def plot_scen(S_s,y=None):
     '''
 
     :param S_s:
@@ -169,9 +173,13 @@ def plot_scen(S_s):
         ax = fig.add_subplot(111, projection='3d')
         for i in np.arange(S_s.shape[1]):
             ax.plot(np.arange(S_s.shape[0]), np.squeeze(S_s[:, i, 0]), np.squeeze(S_s[:, i, 1]), color='k', alpha=0.1)
+        if y is not None:
+            ax.plot(np.arange(S_s.shape[0]),y[:,0],y[:,1],linewidth=1.5)
     elif S_s.shape[2]==1:
         fig = plt.figure()
         plt.plot(np.squeeze(S_s),color='k', alpha=0.1)
+        if y is not None:
+            plt.plot(y, linewidth=1.5)
     else:
         assert S_s.shape[2]>2, 'Error: cannot visualize more than bivariate scenarios'
 
@@ -238,7 +246,10 @@ def get_network(S_s,P_s):
                 continue
             else:
                 # find parent node
-                parent_node = [x for x, y in g.nodes(data=True) if y['t'] == t - 1 and np.array_equal(y['v'], mu_past)]
+                try:
+                    parent_node = [x for x, y in g.nodes(data=True) if y['t'] == t - 1 and np.array_equal(y['v'], mu_past)]
+                except:
+                    print('The tree does not have a root! It is likely that you did required more than one node as first node')
                 # create the node and add an edge from current point to its parent
                 new_node = len(g.nodes())
                 g.add_node(new_node, t=t, p=p, v=mu)
