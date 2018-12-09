@@ -327,48 +327,6 @@ class BatteryController:
         self.scen_idxs = scen_idxs_hist
 
     def solve_step(self,P_hat,ref=None):
-        """
-        Solve a single step
-        """
-        '''
-        p_buy = self.pars['pb']
-        p_sell = self.pars['ps']
-        H = self.h
-        x = cvx.Variable((H + 1,1))
-        y = cvx.Variable((H, 1))
-        u = cvx.Variable((H, 2))
-        pm = P_hat
-        x_start = 0.5
-        one_v = np.ones((1, H))
-        constraints = [x[1:] <= self.x_u]
-        if np.size(self.Ad)>1:
-            assert np.size(self.Ad) == H , 'Error:length of ts must be equal to the horizon'
-            for i in np.arange(len(self.Ad)):
-                #constraints.append( x[i+1] == self.Ad[i] * x[i] +  u[[i],:] * self.Bd[[i],:].T)
-                constraints.append(x[1:] == np.diag(self.Ad) * x[0:-1] + cvx.reshape(cvx.diag(u * self.Bd.T),(len(self.Ad),1)))
-        else:
-            constraints.append( x[1:] == self.Ad * x[0:-1] +  u * self.Bd.T)
-        constraints.append(x[1:] <= self.x_u)
-        constraints.append(x[1:] >= self.x_l)
-        constraints.append(u[:, 0] >= 0)
-        constraints.append(u[:, 1] >= 0)
-        constraints.append(u[:, 0] <= self.E_0 * self.pars['C'])
-        constraints.append(u[:, 1] <= self.E_0 * self.pars['C'])
-        constraints.append(y >= p_buy * (pm + cvx.reshape((u[:, 0] - u[:, 1]),(H,1))))
-        constraints.append(y >= p_sell * (pm + cvx.reshape((u[:, 0] - u[:, 1]),(H,1))))
-        constraints.append(x[0] == x_start)
-        # eco_cost = ct * (pm + (u[0] - u[1]))
-        ref = -P_hat
-        dsch_punish = np.maximum(ref, 0).T * 100
-        cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))-ref)
-
-        # peak_cost = cvx.square(pm + (u[0]-u[1]))
-        obj = cost
-        prob = cvx.Problem(cvx.Minimize(obj), constraints)
-
-        prob.solve()
-        u.value
-        '''
 
         #P_hat = self.P_hat
         if self.pars['type'] in ['stochastic','dist_stoc']:
