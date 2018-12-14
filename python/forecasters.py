@@ -166,7 +166,7 @@ class HoltWinters:
         if self.period.size == 2:
             self.s2mp = np.zeros(self.period[1])
 
-    def fit(self, y_history):
+    def train(self, y_history):
         """
         Fit
         :param y_history: y history
@@ -256,3 +256,31 @@ class HoltWinters:
             for i, h in enumerate(self.horizon):
                 y_hat[i] = a + h * b + self.s1mp[(h - 1) % self.period[0]] + self.s2mp[(h - 1) % self.period[1]]
         return y_hat
+
+class pre_trained_forecaster:
+    def __init__(self,dataset,scenarios_per_step):
+        '''
+        :param dataset: dict containing future scenarios, in a n_obs*n_sa*n_scens ndarray
+        '''
+
+        assert 'scenarios' in dataset.keys(), 'Error, dataset must contain a scenario tensor'
+        assert len(dataset['scenarios'].shape)==3, 'Error, scenarios in dataset must be a 3-tensor'
+        assert 'y_hat' in dataset.keys(), 'Error, dataset must contain a y_hat matrix'
+        assert len(dataset['y_hat'].shape)==2, 'Error, y_hat in dataset must be a 2-matrix'
+        self.scenarios = dataset['scenarios']
+        self.y_hat = dataset['y_hat']
+        self.scenarios_per_step = scenarios_per_step
+
+    def train(self,X,y):
+        return 0
+
+    def predict(self,time):
+        y_hat = self.y_hat[time,:]
+        return y_hat
+
+    def predict_scenarios(self,time):
+        scen_t = np.squeeze(self.scenarios[time,:,:])
+        [S_s, P_s, J_s, Me_s, g] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric='cityblock',
+                                           nodes=self.scenarios_per_step)
+        return g, S_s
+

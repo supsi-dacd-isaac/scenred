@@ -7,7 +7,7 @@ import cvxpy as cvx
 import scipy as sp
 from functools import reduce
 from scenred import scenred
-from forecasters import HoltWinters, RELM
+import forecasters
 import networkx as nx
 # --------------------------------------------------------------------------- #
 # Constants
@@ -34,7 +34,8 @@ def controller_pars_builder(e_n: float=1,
                             type: str='peak_shaving',
                             alpha: float=1,
                             rho: float=0.5,
-                            g=None):
+                            n_final_scens: int=10,
+                            n_init_scens: int = 5):
     """
     :param e_n: nominal capacity of the battery [kWh]
     :type e_n: double
@@ -84,13 +85,14 @@ def controller_pars_builder(e_n: float=1,
             'type': type,
             'alpha': alpha,
             'rho': rho,
-            'g':g}
+            'n_final_scens':n_final_scens,
+            'n_init_scens':n_init_scens}
 
 # --------------------------------------------------------------------------- #
 # Classes
 # --------------------------------------------------------------------------- #
 class BatteryController:
-    def __init__(self, pars=None, logger=None):
+    def __init__(self, dataset, pars=None, logger=None):
         """
         Constructor
         :param pars: controller parameters
@@ -105,7 +107,31 @@ class BatteryController:
                                                       tau_sd=SECS_IN_1Y, lifetime=10000000000,
                                                       dod=pars['dod'], nc=100000000, eta_in=pars['eta_in'],
                                                       eta_out=pars['eta_out'], h=pars['h'],pb=pars['pb'], ps=pars['ps'],
-                                                      type=pars['type'], alpha=pars['alpha'],rho=pars['rho'],g=pars['g'])
+                                                      type=pars['type'], alpha=pars['alpha'],rho=pars['rho'],
+                                                      n_final_scens = pars['n_final_scens'],
+                                                      n_init_scens = pars['n_init_scens'])
+
+        if 'X_tr' in dataset.keys():
+            self.forecaster_type = 'online'
+        elif 'scenarios' in dataset.keys():
+            self.forecaster_type = 'pre-trained'
+        else:
+            assert 1==0, 'dataset must contain X_tr or a set of scenarios'
+
+        # number of scenarios per step in case of stochastic control
+        N_FINAL_SCENARIOS = pars['n_final_scens']
+        N_INIT_SCEN = pars['n_init_scens']
+
+        if self.forecaster_type == 'online':  # train a RELM forecaster
+            # create predictor
+            scens_per_step = np.linspace(N_INIT_SCEN, N_FINAL_SCENARIOS, dataset['y_tr'].shape[1], dtype=int)
+            relm = forecasters.RELM(scenarios_per_step=scens_per_step, lamb=1e-5)
+            relm.train(dataset['X_tr'], dataset['y_tr'])
+            self.forecaster = relm
+        else:  # assume that forecasts are available in the dataset
+            scens_per_step = np.linspace(N_INIT_SCEN, N_FINAL_SCENARIOS, dataset['scenarios'].shape[1], dtype=int)
+            self.forecaster = forecasters.pre_trained_forecaster(dataset,scenarios_per_step = scens_per_step)
+
         self.pars = controller_pars
         self.cvx_solver = None
         self.pm = None
@@ -117,6 +143,8 @@ class BatteryController:
         self.pm_st = None
         self.ref_st = None
         self.u_st = None
+        self.x_st = None
+        self.p_st = None
         self.dsch_punish_st = None
         self.scen_idxs = None
 
@@ -167,8 +195,8 @@ class BatteryController:
         self.D = D
 
         # build fixed constraints
-        self.x_u = self.E_0 * 0.9
-        self.x_l = self.E_0 * 0.2
+        self.x_u = self.E_0
+        self.x_l = self.E_0 * (1-self.pars['DOD'])
         self.u_l = np.zeros((1,2)).reshape(-1,1)
         self.u_u = np.ones((1, 2)).reshape(-1,1) * self.E_0 * self.pars['C']
 
@@ -182,7 +210,11 @@ class BatteryController:
 
         # ------ Build a CVX solver as reference -------
         if self.pars['type'] in ['stochastic','dist_stoc']:
-            self.g = self.pars['g']
+            if self.forecaster_type == 'online':
+                g,S_s = self.forecaster.predict_scenarios(dataset['X_te'][[0], :])
+            elif self.forecaster_type == 'pre-trained':
+                g,S_s = self.forecaster.predict_scenarios(time=0)
+            self.g = g
             self.build_stochastic_cvx_solver(k)
         else:
             self.build_cvx_solver(k)
@@ -195,7 +227,7 @@ class BatteryController:
         else:
             n_step_per_day = int(86400 / self.pars['ts'])
 
-        self.forecaster = HoltWinters(alpha=0.05, beta=0, gamma=np.array([0.9,0.9]), period=np.array([1440,1440*7]), horizon=np.array(range(1,n_step_per_day+1)), method='add')
+        #self.forecaster = HoltWinters(alpha=0.05, beta=0, gamma=np.array([0.9,0.9]), period=np.array([1440,1440*7]), horizon=np.array(range(1,n_step_per_day+1)), method='add')
         self.P_hat = None
 
         self.batch = Batch(self)
@@ -297,6 +329,8 @@ class BatteryController:
 
         constraints.append(u[:, 0] >= 0)
         constraints.append(u[:, 1] >= 0)
+        constraints.append(x[1:] <= self.x_u)
+        constraints.append(x[1:] >= self.x_l)
 
         constraints.append(u[:, 0] <= self.E_0 * self.pars['C'])
         constraints.append(u[:, 1] <= self.E_0 * self.pars['C'])

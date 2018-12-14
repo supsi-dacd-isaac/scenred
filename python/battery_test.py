@@ -7,6 +7,8 @@ matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 from _battery_controller import BatteryController
 import networkx as nx
+import battery
+
 
 np.random.seed(0)
 # create an easy signal
@@ -25,13 +27,29 @@ for e in np.arange(2*obs_per_day):
     X.append(np.hstack([x_cos[win].reshape(-1,1),y_past[win].reshape(-1,1)]))
     target.append(y[win].reshape(-1,1))
 
+dataset = {}
 X = np.hstack(X)
 target = np.hstack(target)
-X_tr = X[0:int(N*0.8),:]
-target_tr = target[0:int(N*0.8),:]
-X_te = X[int(N*0.8):,:]
-target_te = target[int(N*0.8):,:]
 
+# online forecasting
+dataset['X_tr'] = X[0:int(N*0.8),:]
+dataset['y_tr']= target[0:int(N*0.8),:]
+dataset['X_te']= X[int(N*0.8):,:]
+dataset['y_te'] = target[int(N*0.8):,:]
+
+
+pars = {'h':30,
+        'ts':60*15,
+        'ps':0.07,
+        'pb':0.2,
+        'type':'stochastic',
+        'alpha':1,
+        'rho':1,
+        'n_final_scens':10,
+        'n_init_scens':5}
+
+
+battery.Battery(dataset=dataset,pars=pars,c_nom=1,cap_nom=500)
 
 # create predictor
 N_FINAL_SCENARIOS = 10
@@ -87,6 +105,7 @@ controller_pars = {'e_n': 1,
                    'alpha': alpha,
                    'rho': rho,
                    'g':g}
+
 batt_cont = BatteryController(pars=controller_pars)
 #batt_cont.solve_step(np.array(list(nx.get_node_attributes(g,'v').values())[0:-1] ).reshape(-1,1))
 ppp  = -np.array(list(nx.get_node_attributes(g, 'v').values()))
