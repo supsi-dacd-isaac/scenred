@@ -3,6 +3,11 @@ import cvxpy as cvx
 from _battery_controller import BatteryController
 import scipy as sp
 from forecasters import RELM
+import matplotlib
+matplotlib.use('Qt5Agg')
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
+
 # --------------------------------------------------------------------------- #
 # Constants
 # --------------------------------------------------------------------------- #
@@ -147,6 +152,10 @@ class Battery:
         self.history['P_cont'] = []
         self.history['P_cont_real'] = []
         self.history['P_uncont'] = []
+        self.history['SOC_real'] = []
+
+    def do_mpc(self):
+        0
 
     def solve_step(self,time,coord=False):
         '''
@@ -155,14 +164,15 @@ class Battery:
         :return:
         '''
 
-        P_controlled, P_uncontrolled, U = self.battery_controller.solve_step(time,coord = coord)
-        P_battery,SOC,states = self.simulate(np.atleast_1d(U[0,0]-U[0,1]))
+        P_controlled, P_uncontrolled, U, E = self.battery_controller.solve_step(time,coord = coord)
+        P_battery,SOC_real,states = self.simulate(np.atleast_1d(U[0,0]-U[0,1]))
         P_final = P_uncontrolled[0] + P_battery
         self.history['P_cont'].append(P_controlled[0][0])
         self.history['P_cont_real'].append(P_final[0])
         self.history['P_uncont'].append(P_uncontrolled[0])
+        self.history['SOC_real'].append(SOC_real[0])
 
-        return P_final, P_controlled, P_uncontrolled, U, SOC
+        return P_final, P_controlled, P_uncontrolled, U, E
 
 
     def simulate(self,P_asked):
@@ -270,3 +280,90 @@ class Battery:
 
         return simulator,i,states,states_old,v,v_old,SOC_old,SOC,P,P_asked,randn
 
+
+    def online_stochastic_plot(self,N):
+
+        fig, ax = plt.subplots(2)
+        dims = self.battery_controller.scen_idxs.shape
+        l_unc = ax[0].plot(np.zeros(dims), alpha=0.2, linewidth=0.5)
+        l_cont = ax[0].plot(np.zeros(dims), alpha=0.2, linewidth=0.5)
+        l_con_past = ax[0].plot(np.ones(dims[0]).reshape(-1, 1), np.nan * np.ones(dims))
+        l_real_past = ax[0].plot(np.ones(dims[0]).reshape(-1, 1), np.nan * np.ones(dims), '+')
+        l_unc_past = ax[0].plot(np.ones(dims[0]).reshape(-1, 1), np.nan * np.ones(dims))
+
+        p_in = ax[1].plot(np.zeros(dims), alpha=0.2, linewidth=0.5)
+        p_out = ax[1].plot(np.zeros(dims), alpha=0.2, linewidth=0.5)
+        e_batt = ax[1].plot(np.zeros(dims), alpha=0.2, linewidth=0.5)
+        soc_real_past = ax[1].plot(np.ones(dims[0]).reshape(-1, 1), np.nan * np.ones(dims))
+
+        xdata = np.arange(dims[0]).reshape(-1, 1)
+        cmap = plt.get_cmap('Set1')
+        line_colors = cmap(np.linspace(0, 1, 5))
+        x_past = np.arange(1 - dims[0], 1)
+        past_data_1 = np.nan * np.ones(dims[0])
+        past_data_2 = np.nan * np.ones(dims[0])
+        past_data_3 = np.nan * np.ones(dims[0])
+        past_data_4 = np.nan * np.ones(dims[0])
+
+        min_y = np.sign(self.battery_controller.y_min) * np.abs(self.battery_controller.y_min) * 1.1
+        max_y = np.sign(self.battery_controller.y_max) * np.abs(self.battery_controller.y_max) * 1.1
+
+        def animate(i):
+            P_final, P_controlled, P_uncontrolled, U, E = self.solve_step(time=i)
+            PS = P_uncontrolled
+
+            for s in np.arange(self.battery_controller.scen_idxs.shape[1]):
+                Udata = U[self.battery_controller.scen_idxs[:, s].ravel(), :]
+                E_n = E[self.battery_controller.scen_idxs[:, s].ravel(), :]
+                Pundata = PS[self.battery_controller.scen_idxs[:, s].ravel()]
+                Pcontdata = Pundata + Udata[:, [0]] - Udata[:, [1]]
+
+                l_unc[s].set_data(xdata, Pundata)
+                l_unc[s].set_color(line_colors[0, :])
+                l_cont[s].set_data(xdata, Pcontdata)
+                l_cont[s].set_color(line_colors[1, :])
+                p_in[s].set_data(xdata, Udata[:, [0]])
+                p_in[s].set_color(line_colors[2, :])
+                p_out[s].set_data(xdata, Udata[:, [1]])
+                p_out[s].set_color(line_colors[3, :])
+                e_batt[s].set_data(xdata, E_n)
+                e_batt[s].set_color(line_colors[4, :])
+
+            past_data_1[dims[0] - np.minimum(len(np.hstack(self.history['P_cont'])), dims[0]):] = np.hstack(
+                self.history['P_cont'])[-dims[0]:]
+            past_data_2[dims[0] - np.minimum(len(np.hstack(self.history['P_cont_real'])), dims[0]):] = np.hstack(
+                self.history['P_cont_real'])[-dims[0]:]
+            past_data_3[dims[0] - np.minimum(len(np.hstack(self.history['P_uncont'])), dims[0]):] = np.hstack(
+                self.history['P_uncont'])[-dims[0]:]
+            past_data_4[dims[0] - np.minimum(len(np.hstack(self.history['SOC_real'])), dims[0]):] = np.hstack(
+                self.history['SOC_real'])[-dims[0]:]
+
+            l_con_past[0].set_data(x_past, past_data_1)
+            l_con_past[0].set_color(line_colors[1, :])
+            l_real_past[0].set_data(x_past, past_data_2)
+            l_real_past[0].set_color(line_colors[1, :])
+            l_unc_past[0].set_data(x_past, past_data_3)
+            l_unc_past[0].set_color(line_colors[0, :])
+            ax[0].set_xlim(-dims[0], dims[0])
+            ax[0].set_ylim(min_y, max_y)
+            ax[0].set_ylabel('power [kW]')
+            ax[0].set_xlabel('timestep [-]')
+
+            soc_real_past[0].set_data(x_past, past_data_4)
+            soc_real_past[0].set_color(line_colors[4, :])
+
+            ax[1].set_xlim(-dims[0], dims[0])
+            ax[1].set_ylim(0, self.e_nom*1.1)
+            ax[1].set_ylabel('power [kW]')
+            ax[1].set_xlabel('timestep [-]')
+
+            ax[1].figure.canvas.draw()
+            ax[0].figure.canvas.draw()
+            print(i)
+
+        ani = matplotlib.animation.FuncAnimation(fig, animate, frames=N, repeat=False)
+
+        Writer = animation.writers['ffmpeg']
+        writer = Writer(fps=10, metadata=dict(artist='Me'), bitrate=1800)
+        ani.save('animation.mp4', writer=writer, dpi=300)
+        plt.show()

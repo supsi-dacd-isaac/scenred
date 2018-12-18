@@ -128,9 +128,15 @@ class BatteryController:
             relm = forecasters.RELM(X_te=dataset['X_te'],scenarios_per_step=scens_per_step, lamb=1e-5)
             relm.train(dataset['X_tr'], dataset['y_tr'])
             self.forecaster = relm
+            self.y_max = np.max(dataset['y_tr'].ravel())
+            self.y_min = np.min(dataset['y_tr'].ravel())
+
         else:  # assume that forecasts are available in the dataset
             scens_per_step = np.linspace(N_INIT_SCEN, N_FINAL_SCENARIOS, dataset['scenarios'].shape[1], dtype=int)
             self.forecaster = forecasters.pre_trained_forecaster(dataset,scenarios_per_step = scens_per_step)
+            self.y_max = np.max(dataset['scenarios'].ravel())
+            self.y_min = np.min(dataset['scenarios'].ravel())
+
 
         self.pars = controller_pars
         self.cvx_solver = None
@@ -384,6 +390,7 @@ class BatteryController:
             U = self.u_st.value
             p_battery_0 = self.u_st.value[0, 0] - self.u_st.value[0, 1]
             P_hat = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+            SOC = self.x_st.value
 
         else:
             if self.P_hat is None:
@@ -405,6 +412,7 @@ class BatteryController:
             U = self.u.value
             p_battery_0 = self.u.value[0, 0] - self.u.value[0, 1]
             P_hat = self.P_hat
+            SOC = self.x.value
 
         P_controlled = P_hat+U[:, [0]]-U[:, [1]]
 
@@ -412,7 +420,7 @@ class BatteryController:
         if not coord:
             self.P_hat = None
 
-        return P_controlled, P_hat, U
+        return P_controlled, P_hat, U, SOC
 
     def solve_batch(self,P_hat):
         """

@@ -137,7 +137,7 @@ def scenred(samples, **kwargs):
             P[i - 1,:] = P[i,:]
             D[~J[i,:], ~J[i,:]] = infty
 
-        print('Branches t=%i: %i' %  (i, branches))
+        #print('Branches t=%i: %i' %  (i, branches))
 
     S = S[:, J[-1,:] > 0,:]
     P = P[:, J[-1,:] > 0]
