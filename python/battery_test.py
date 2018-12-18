@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 from _battery_controller import BatteryController
 import networkx as nx
 import battery
@@ -38,8 +39,9 @@ dataset['X_te']= X[int(N*0.8):,:]
 dataset['y_te'] = target[int(N*0.8):,:]
 
 
+dt = 60*15
 pars = {'h':30,
-        'ts':60*15,
+        'ts':np.atleast_1d(dt),
         'ps':0.07,
         'pb':0.2,
         'type':'stochastic',
@@ -49,79 +51,81 @@ pars = {'h':30,
         'n_init_scens':5}
 
 
-battery.Battery(dataset=dataset,pars=pars,c_nom=1,cap_nom=500)
+batt = battery.Battery(dataset=dataset,pars=pars,c_nom=0.1,cap_nom=0.3)
+P_final, P_controlled, P_uncontrolled, U, SOC = batt.solve_step(time=0)
 
-# create predictor
-N_FINAL_SCENARIOS = 10
-scens_per_step = np.linspace(5,N_FINAL_SCENARIOS ,target_te.shape[1],dtype=int)
-relm =  RELM(scenarios_per_step=scens_per_step,lamb=1e-5)
-relm.train(X_tr,target_tr)
-y_hat,quantiles,y_i = relm.predict(X_te)
 
 plt.figure()
-plt.plot(target_te[:,0])
-plt.plot(y_hat[:,0])
-plt.plot(np.squeeze(y_i[:,0,:]),linewidth=0.1)
-
-g,S_s = relm.predict_scenarios(X_te[[0],:])
-plot_scen(S_s,target_te[0,:])
-plot_graph(g)
-
-# ----- Instantiate a battery controller ----------
-
-ts = 60*10 # ten minutes sampling time
-h = 144
-h_mult = S_s.shape[0]
-
-# set random seed
-np.random.seed(0)
-sum_stp = 0
-expend = 1
-# use logarithmic spacing for the aggregation
-while sum_stp != h:
-    tsteps = np.asanyarray(np.logspace(0,expend,h_mult),int)
-    sum_stp = np.sum(tsteps)
-    expend = expend+0.0001
-    print('%f' % sum_stp)
-
-ts_mult = ts*tsteps
-
-alpha = 1
-rho = 0.1
-k = alpha / (2 * rho)
-controller_pars = {'e_n': 1,
-                   'c': 1/2,
-                   'ts': ts_mult,
-                   'tau_sd': 365*24*3600,
-                   'lifetime': 20,
-                   'dod': 0.8,
-                   'nc': 3000,
-                   'eta_in': 0.9,
-                   'eta_out': 0.9,
-                   'h': h_mult,
-                   'pb': 0.2,
-                   'ps': 0.07,
-                   'type': 'stochastic',
-                   'alpha': alpha,
-                   'rho': rho,
-                   'g':g}
-
-batt_cont = BatteryController(pars=controller_pars)
-#batt_cont.solve_step(np.array(list(nx.get_node_attributes(g,'v').values())[0:-1] ).reshape(-1,1))
-ppp  = -np.array(list(nx.get_node_attributes(g, 'v').values()))
-batt_cont.solve_step(g)
-
-plt.figure()
-U = batt_cont.u_st.value
-for s in np.arange(batt_cont.scen_idxs.shape[1]):
-    u_s = U[batt_cont.scen_idxs[:,s].ravel(),:]
+U = batt.battery_controller.u_st.value
+for s in np.arange(batt.battery_controller.scen_idxs.shape[1]):
+    u_s = U[batt.battery_controller.scen_idxs[:,s].ravel(),:]
     plt.plot(u_s[:, 0],color='b',alpha=0.2,linewidth=0.5)
     plt.plot(u_s[:, 1],color='r',alpha=0.2,linewidth=0.5)
 
 plt.figure()
-PS = np.array(list(nx.get_node_attributes(g,'v').values()))
-for s in np.arange(batt_cont.scen_idxs.shape[1]):
-    u_s = U[batt_cont.scen_idxs[:,s].ravel(),:]
-    Pms = PS[batt_cont.scen_idxs[:,s].ravel()]
+PS =P_uncontrolled
+plt.plot(P_final, '.', color='k', alpha=0.2, linewidth=0.5)
+for s in np.arange(batt.battery_controller.scen_idxs.shape[1]):
+    u_s = U[batt.battery_controller.scen_idxs[:,s].ravel(),:]
+    Pms = PS[batt.battery_controller.scen_idxs[:,s].ravel()]
     plt.plot(Pms +u_s[:, [0]]-u_s[:, [1]],color='b',alpha=0.2,linewidth=0.5)
     plt.plot(Pms,color='r',alpha=0.2,linewidth=0.5)
+
+
+
+Writer = animation.writers['ffmpeg']
+writer = Writer(fps=20, metadata=dict(artist='Me'), bitrate=1800)
+
+
+
+batt = battery.Battery(dataset=dataset,pars=pars,c_nom=0.5,cap_nom=10)
+
+fig, ax = plt.subplots()
+dims = batt.battery_controller.scen_idxs.shape
+l_unc = ax.plot(np.zeros(dims),alpha=0.2,linewidth=0.5)
+l_cont = ax.plot(np.zeros(dims),alpha=0.2,linewidth=0.5)
+l_con_past = ax.plot(np.ones(dims[0]).reshape(-1,1),np.nan*np.ones(dims),'.')
+l_real_past = ax.plot(np.ones(dims[0]).reshape(-1,1),np.nan*np.ones(dims),'+')
+l_unc_past = ax.plot(np.ones(dims[0]).reshape(-1,1),np.nan*np.ones(dims))
+
+
+xdata = np.arange(dims[0]).reshape(-1,1)
+cmap=plt.get_cmap('Set1')
+line_colors = cmap(np.linspace(0,1,2))
+x_past = np.arange(-dims[0], 0)
+past_data_1 = np.nan*np.ones(dims[0])
+past_data_2 = np.nan*np.ones(dims[0])
+past_data_3 = np.nan*np.ones(dims[0])
+
+def animate(i):
+    P_final, P_controlled, P_uncontrolled, U, SOC = batt.solve_step(time=i)
+    PS = P_uncontrolled
+    data_max = 0
+    data_min = 0
+
+    for s in np.arange(batt.battery_controller.scen_idxs.shape[1]):
+        Udata = U[batt.battery_controller.scen_idxs[:, s].ravel(), :]
+        Pundata = PS[batt.battery_controller.scen_idxs[:, s].ravel()]
+        Pcontdata= Pundata +Udata[:,[0]] - Udata[:, [1]]
+        data_max = np.maximum(np.max(Pundata),data_max)
+        data_min = np.minimum(np.min(Pundata), data_min)
+
+        l_unc[s].set_data(xdata, Pundata)
+        l_unc[s].set_color(line_colors[0,:])
+        l_cont[s].set_data(xdata, Pcontdata)
+        l_cont[s].set_color(line_colors[1,:])
+
+    past_data_1[dims[0]-np.minimum(len(np.hstack(batt.history['P_cont'])),dims[0]):] = np.hstack(batt.history['P_cont'])[-dims[0]:]
+    past_data_2[dims[0]-np.minimum(len(np.hstack(batt.history['P_cont_real'])),dims[0]):] = np.hstack(batt.history['P_cont_real'])[-dims[0]:]
+    past_data_3[dims[0]-np.minimum(len(np.hstack(batt.history['P_uncont'])),dims[0]):] = np.hstack(batt.history['P_uncont'])[-dims[0]:]
+
+    l_con_past[0].set_data(x_past, past_data_1 )
+    l_real_past[0].set_data(x_past, past_data_2)
+    l_unc_past[0].set_data(x_past, past_data_3)
+    l_unc_past[0].set_color(line_colors[0, :])
+    ax.set_xlim(-dims[0],dims[0])
+    ax.set_ylim(data_min, data_max)
+    ax.figure.canvas.draw()
+    print(i)
+
+ani = matplotlib.animation.FuncAnimation(fig, animate, frames=100, repeat=False)

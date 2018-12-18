@@ -125,7 +125,7 @@ class BatteryController:
         if self.forecaster_type == 'online':  # train a RELM forecaster
             # create predictor
             scens_per_step = np.linspace(N_INIT_SCEN, N_FINAL_SCENARIOS, dataset['y_tr'].shape[1], dtype=int)
-            relm = forecasters.RELM(scenarios_per_step=scens_per_step, lamb=1e-5)
+            relm = forecasters.RELM(X_te=dataset['X_te'],scenarios_per_step=scens_per_step, lamb=1e-5)
             relm.train(dataset['X_tr'], dataset['y_tr'])
             self.forecaster = relm
         else:  # assume that forecasts are available in the dataset
@@ -211,7 +211,7 @@ class BatteryController:
         # ------ Build a CVX solver as reference -------
         if self.pars['type'] in ['stochastic','dist_stoc']:
             if self.forecaster_type == 'online':
-                g,S_s = self.forecaster.predict_scenarios(dataset['X_te'][[0], :])
+                g,S_s = self.forecaster.predict_scenarios(0)
             elif self.forecaster_type == 'pre-trained':
                 g,S_s = self.forecaster.predict_scenarios(time=0)
             self.g = g
@@ -325,7 +325,7 @@ class BatteryController:
                 constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == np.diag(self.Ad) * x[scen_idxs] + cvx.reshape(cvx.diag(u[scen_idxs,:] * self.Bd.T), (len(self.Ad), 1)))
                 #constraints.append(x[scen_idxs[1:]] == np.diag(self.Ad[0:-1]) * x[scen_idxs[0:-1]] + cvx.reshape(cvx.diag(u[scen_idxs[0:-1],:] * self.Bd.T[:,:-1]), (len(self.Ad)-1, 1)))
             else:
-                constraints.append(x[1:] == self.Ad * x[0:-1] + u * self.Bd.T)
+                constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == self.Ad * x[scen_idxs] + u[scen_idxs,:] * self.Bd.T)
 
         constraints.append(u[:, 0] >= 0)
         constraints.append(u[:, 1] >= 0)
@@ -360,18 +360,20 @@ class BatteryController:
         self.dsch_punish_st = dsch_punish
         self.scen_idxs = scen_idxs_hist
 
-    def solve_step(self,P_hat,ref=None):
+    def solve_step(self,time,ref=None,coord=False):
 
         #P_hat = self.P_hat
         if self.pars['type'] in ['stochastic','dist_stoc']:
+            if self.P_hat is None:
+                self.P_hat, Ss = self.forecaster.predict_scenarios(time)
             # P must be a networkx graph
             # default reference does peak shaving
             if ref is None:
-                ref = -np.array(list(nx.get_node_attributes(P_hat, 'v').values()))
-            self.p_st.value = np.array(list(nx.get_node_attributes(P_hat, 'p').values())).reshape(1,-1)
-            self.pm_st.value = np.array(list(nx.get_node_attributes(P_hat, 'v').values()))
+                ref = -np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+            self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
+            self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
-            self.dsch_punish_st.value = np.maximum(ref, 0).T * 100
+            self.dsch_punish_st.value = 1*(np.maximum(ref, 0).T>0)
             solution = self.cvx_solver_st.solve()
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
@@ -379,25 +381,38 @@ class BatteryController:
             else:
                 self.x_start.value = self.Ad[0] * self.x_start.value + self.Bd[[0],:].dot(self.u_st.value[0,:].reshape(-1, 1)).flatten()
 
-            p_set = self.u_st.value[0, 0] - self.u_st.value[0, 1]
+            U = self.u_st.value
+            p_battery_0 = self.u_st.value[0, 0] - self.u_st.value[0, 1]
+            P_hat = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
 
         else:
+            if self.P_hat is None:
+                self.P_hat,quantiles, y_i = self.forecaster.predict(time)
             # default reference does peak shaving
             if ref == None:
-                ref = -P_hat
-            self.pm.value = P_hat
+                ref = -self.P_hat
+            self.pm.value = self.P_hat
             if self.pars['type'] == 'peak_shaving':
                 self.ref.value = ref
-                self.dsch_punish.value = np.maximum(self.ref.value, 0).T * 100
+                self.dsch_punish.value = 1*(np.maximum(self.ref.value, 0).T>0)
             solution = self.cvx_solver.solve()
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
                     self.u.value[0, :].reshape(-1, 1)).flatten()
             else:
                 self.x_start.value = self.Ad[0] * self.x_start.value + self.Bd[[0],:].dot(self.u.value[0,:].reshape(-1, 1)).flatten()
-            p_set = self.u.value[0, 0] - self.u.value[0, 1]
 
-        return p_set
+            U = self.u.value
+            p_battery_0 = self.u.value[0, 0] - self.u.value[0, 1]
+            P_hat = self.P_hat
+
+        P_controlled = P_hat+U[:, [0]]-U[:, [1]]
+
+        # reset the forecast if there's not the need to keep it for dstributed coordination scheme
+        if not coord:
+            self.P_hat = None
+
+        return P_controlled, P_hat, U
 
     def solve_batch(self,P_hat):
         """
@@ -421,16 +436,6 @@ class BatteryController:
         p_set = self.u_batch[0,0] - self.u_batch[0,1]
         return p_set
 
-    def update_forecast(self, P, Pb_old):
-        """
-        Update the forecast
-        :param P:
-        :type P: numpy ndarray
-        :param Pb_old:
-        :type P_old: numpy ndarray
-        """
-        p_corrected = P - Pb_old
-        self.P_hat = self.forecaster.predict(p_corrected).reshape(-1,1)
 
 
 class Batch:
@@ -463,7 +468,7 @@ class Batch:
         self.A = self.build_A()
         self.k = controller.k
         self.T = controller.Tcvx
-        Z = 1e-6*np.ones((self.h,self.h))
+        Z = 1e-16*np.ones((self.h,self.h))
         T = np.hstack([Z,self.T])
         self.Q = self.k*T.T.dot(T)
 

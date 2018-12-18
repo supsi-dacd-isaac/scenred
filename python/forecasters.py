@@ -4,7 +4,7 @@ class RELM:
     '''
     RELM forecaster
     '''
-    def __init__(self,n_elms=100,nodes=200,var_ratio=0.7,obs_ratio=0.3,lamb=1,activation='fast_sigmoid',initialization='uniform',q_vect=(0.25,0.5,0.74),scenarios_per_step=()):
+    def __init__(self,X_te=None,n_elms=100,nodes=200,var_ratio=0.7,obs_ratio=0.3,lamb=1,activation='fast_sigmoid',initialization='uniform',q_vect=(0.25,0.5,0.74),scenarios_per_step=()):
         self.n_elms = n_elms
         self.nodes = nodes
         self.var_ratio = var_ratio
@@ -16,6 +16,7 @@ class RELM:
         self.relms=[]
         self.n_target = 0
         self.scenarios_per_step = scenarios_per_step
+        self.X_te = X_te
 
     def train(self,X,Y):
         n_obs,n_var = X.shape
@@ -42,23 +43,24 @@ class RELM:
 
         self.relms = relms
 
-    def predict(self,X_te):
+    def predict(self,time):
+        X_te = self.X_te[np.atleast_1d(time),:]
         y_i = np.zeros((X_te.shape[0],self.n_target,self.n_elms))
         for i in np.arange(self.n_elms):
             X_i = X_te[:,self.relms[i].var_idx]
             y_i[:,:,i] = self.relms[i].predict(X_i)
 
-        y_hat = np.median(y_i,2)
+        y_hat = np.mean(y_i,2).reshape(-1,1)
         quantiles = np.quantile(y_i,self.q_vect,2) # n_sa*n_obs*n_quantiles
         quantiles = np.moveaxis(quantiles, 0, 2)
         return y_hat,quantiles,y_i
 
-    def predict_scenarios(self,X_te):
+    def predict_scenarios(self,time):
         '''
         :param X_te: a vector containing regressors for a single timestep
         :return: a scenario tree of future values
         '''
-
+        X_te = self.X_te[np.atleast_1d(time), :]
         y_i = np.zeros((self.n_target,self.n_elms))
         for i in np.arange(self.n_elms):
             X_i = X_te[:,self.relms[i].var_idx]
