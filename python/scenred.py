@@ -252,9 +252,16 @@ def get_network(S_s,P_s):
                     print('The tree does not have a root! It is likely that you did required more than one node as first node')
                 # create the node and add an edge from current point to its parent
                 new_node = len(g.nodes())
-                g.add_node(new_node, t=t, p=p, v=mu)
+                g.add_node(new_node, t=t, p=p, v=mu,label=new_node)
                 g.add_edge(parent_node[0], new_node)
                 #print('node %i added, with values' % (new_node), mu)
+
+    # approximated probabilities
+    for i in np.arange(len(g.nodes)):
+        g.nodes[i]['p2'] = np.sum([ g.nodes[n]['t']==t for n in  nx.descendants(g,i)])/np.sum([ g.nodes[n]['t']==t for n in  nx.descendants(g,0)])
+        if g.nodes[i]['p2']==0:
+            g.nodes[i]['p2'] = 1/len(nx.descendants(g,0))
+
 
     return g
 

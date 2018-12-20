@@ -38,8 +38,8 @@ class RELM:
             elm.train(X_i, y_i, self.nodes, self.lamb, self.initialization)
             relms.append(elm)
             relms[i].var_idx = var_idx
-            if np.mod(round((i / self.n_elms) * 100), 10) == 0:
-                print('*')
+            #if np.mod(round((i / self.n_elms) * 100), 10) == 0:
+            #    print('*')
 
         self.relms = relms
 
@@ -50,7 +50,7 @@ class RELM:
             X_i = X_te[:,self.relms[i].var_idx]
             y_i[:,:,i] = self.relms[i].predict(X_i)
 
-        y_hat = np.mean(y_i,2).reshape(-1,1)
+        y_hat = np.squeeze(np.mean(y_i,2))
         quantiles = np.quantile(y_i,self.q_vect,2) # n_sa*n_obs*n_quantiles
         quantiles = np.moveaxis(quantiles, 0, 2)
         return y_hat,quantiles,y_i
@@ -277,8 +277,8 @@ class pre_trained_forecaster:
         return 0
 
     def predict(self,time):
-        y_hat = self.y_hat[time,:]
-        return y_hat
+        y_hat = self.y_hat[time,:].reshape(-1,1)
+        return y_hat,None,None
 
     def predict_scenarios(self,time):
         scen_t = np.squeeze(self.scenarios[time,:,:])

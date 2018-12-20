@@ -26,8 +26,8 @@ def controller_pars_builder(e_n: float=1,
                             lifetime: int=YEARS_LIFETIME,
                             dod: float=0.8,
                             nc: float=3000,
-                            eta_in: float=0.9,
-                            eta_out: float=0.9,
+                            eta_in: float=0.87,
+                            eta_out: float=0.87,
                             h: float=48,
                             pb: float=0.2,
                             ps: float=0.07,
@@ -279,7 +279,8 @@ class BatteryController:
         elif self.pars['type'] in ['stochastic','distributed','peak_shaving','dist_stoc']:
             ref = cvx.Parameter((self.Tcvx.shape[0], 1))
             dsch_punish = cvx.Parameter((1,self.Tcvx.shape[0]))
-            cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))-ref)
+            u_punish = 1e-6 * cvx.sum_squares(u)
+            cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))+pm-ref)+u_punish
         else:
             raise TypeError('pars["type"] not recognized')
 
@@ -310,7 +311,7 @@ class BatteryController:
         y = cvx.Variable((n_n, 1))
         u = cvx.Variable((n_n, 2))
         pm = cvx.Parameter((n_n, 1))
-        p = cvx.Parameter((1,n_n))
+        p = cvx.Parameter((1,n_n),nonneg=True)
         x_start = cvx.Parameter(1)
         # probabilities vector
         all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
@@ -346,7 +347,21 @@ class BatteryController:
         # eco_cost = ct * (pm + (u[0] - u[1]))
         ref = cvx.Parameter((n_n, 1))
         dsch_punish = cvx.Parameter((1,n_n))
-        cost = p*y + dsch_punish*u[:,1] + k*cvx.sum_squares(cvx.diag(p.T)*(u[:, [0]] - u[:, [1]]-ref))
+
+        batt_punish = dsch_punish * cvx.diag(p) * u[:, [1]]
+        u_punish = 1e-6 * (u[:, [1]].T* cvx.diag(p.T) * u[:, [1]] + u[:, [0]].T* cvx.diag(p.T) * u[:, [0]])
+        ref_punish = k * p * (u[:, [0]] - u[:, [1]] + pm - ref)**2
+        cost = p * y + batt_punish + ref_punish
+
+       # for i in np.arange(n_n):
+        #     #u_punish = 1e-6 * p[0,i] * ((u[i, [0]])**2 + (u[i, [1]])**2 )
+        #    ref_punish =  k * p[0,i] * (u[i, [0]] - u[i, [1]] + pm[i] - ref[i])**2
+        #    cost += ref_punish #+ u_punish
+
+        #u_punish = 1e-6*(cvx.sum_squares(cvx.diag(p.T)*u[:,[0]])+cvx.sum_squares(cvx.diag(p.T)*u[:,[1]]))
+        #cost = p*y + dsch_punish*cvx.diag(p)*u[:,1] + k*cvx.sum_squares(cvx.diag(p.T)*(u[:, [0]] - u[:, [1]] +pm -ref)) + u_punish
+
+        #cost = cvx.sum(y) + k * cvx.sum_squares((u[:, [0]] - u[:, [1]] + pm - ref))
         #D = np.zeros((self.h+1, 2 * n_n))
         #for i in np.arange(self.h+1):
         #    D[i, i * 2: 2 * (i + 1)] = [1, -1]
@@ -375,11 +390,12 @@ class BatteryController:
             # P must be a networkx graph
             # default reference does peak shaving
             if ref is None:
-                ref = -np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+                #ref = -np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+                ref = np.zeros((len(self.P_hat),1))
             self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
-            self.dsch_punish_st.value = 1*(np.maximum(ref, 0).T>0)
+            self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
             solution = self.cvx_solver_st.solve()
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
@@ -397,11 +413,12 @@ class BatteryController:
                 self.P_hat,quantiles, y_i = self.forecaster.predict(time)
             # default reference does peak shaving
             if ref == None:
-                ref = -self.P_hat
+                #ref = -self.P_hat
+                ref = np.zeros((self.P_hat.shape[0],1))
             self.pm.value = self.P_hat
             if self.pars['type'] == 'peak_shaving':
                 self.ref.value = ref
-                self.dsch_punish.value = 1*(np.maximum(self.ref.value, 0).T>0)
+                self.dsch_punish.value = 1*(self.pm.value<ref).T
             solution = self.cvx_solver.solve()
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
