@@ -9,7 +9,7 @@ import matplotlib.animation as animation
 from _battery_controller import BatteryController
 import networkx as nx
 import battery
-
+from skgarden import forest as QRF
 
 np.random.seed(0)
 
@@ -39,7 +39,7 @@ W_det = W_det[:N,:]
 
 y = np.sin(t*n_days*2*np.pi/N)+ W_det[:,[0]].ravel()
 x_cos = np.cos(t*n_days/N)+np.random.rand(N)
-y_past = y + 0.1*np.random.rand(N)
+y_past = y
 # henkelize
 X = []
 target = []
@@ -58,10 +58,24 @@ dataset['y_tr']= target[0:int(N*0.8),:]
 dataset['X_te']= X[int(N*0.8):,:]
 dataset['y_te'] = target[int(N*0.8):,:]
 
-relm = RELM(dataset['X_te'],nodes=200,n_elms=200,lamb=1)
-relm.train(dataset['X_tr'],dataset['y_tr'])
+reg = 'RELM'
+n_regressors = 200
 N_days = 2
-y_hat,p,y_i = relm.predict(np.arange(obs_per_day*N_days))
+if reg == 'RELM':
+    relm = RELM(dataset['X_te'],nodes=200,n_elms=n_regressors,lamb=1)
+    relm.train(dataset['X_tr'],dataset['y_tr'])
+    y_hat,p,y_i = relm.predict(np.arange(obs_per_day*N_days))
+else:
+    rf = QRF.RandomForestRegressor(n_regressors)
+    rf.fit(dataset['X_tr'],dataset['y_tr'])
+    y_hat = rf.predict(dataset['X_te'][np.arange(obs_per_day*N_days),:])
+    y_i = np.zeros((obs_per_day*N_days,obs_per_day,n_regressors))
+    i=0
+    for e in rf.estimators_:
+        y_i[:,:,i]=e.predict(dataset['X_te'][np.arange(obs_per_day*N_days),:])
+        i+=1
+
+
 data = {}
 data['y_hat'] = y_hat
 data['scenarios'] = y_i
@@ -83,7 +97,7 @@ pars = {'h':obs_per_day,
         'type':'stochastic',
         'alpha':1,
         'rho':1,
-        'n_final_scens':40,
+        'n_final_scens':20,
         'n_init_scens':5}
 
 n_pool = 5

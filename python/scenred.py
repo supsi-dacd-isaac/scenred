@@ -110,7 +110,8 @@ def scenred(samples, **kwargs):
             d_s = np.sort(D_i,0)  # sort distances with respect to the non-discarded scenarios
             idx_s = np.argsort(D_i,0)
             z = d_s[0,:]*P[i,:]  # vector of weighted probabilities
-            z[z == 0] = infty  # set prob. of removed scenario to inf in order to ignore them
+            #z[z == 0] = infty  # set prob. of removed scenario to inf in order to ignore them
+            z[~J[i,:]] = infty  # set prob. of removed scenario to inf in order to ignore them
             idx_rem = np.argmin(z)  # find the scenario which cause the smallest p*d-deviation when merged, and its index
             dp_min = np.min(z)
             idx_aug = idx_s[0, idx_rem]  # retrieve who's being augmented with the probability of idx_rem
@@ -126,7 +127,8 @@ def scenred(samples, **kwargs):
                 S[: i+1, to_merge_idx[j,1],:] =  S[: i+1, idx_aug,:]
 
             # update the differential accuracy
-            delta_p = delta_p + dp_min
+            if not Tol[i]==infty:
+                delta_p = delta_p + dp_min
             delta_rel = delta_p / delta_max
 
         if i > 0:
