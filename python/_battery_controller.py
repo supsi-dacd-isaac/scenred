@@ -392,7 +392,10 @@ class BatteryController:
             if ref is None:
                 #ref = -np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
                 ref = np.zeros((len(self.P_hat),1))
-            self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
+            try:
+                self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
+            except:
+                print('vacca maiala')
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
             self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T

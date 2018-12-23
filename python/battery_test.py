@@ -15,22 +15,23 @@ np.random.seed(0)
 
 #-------------- CREATE SINUSOIDAL SIGNAL --------------------------------------
 n_days = 100
-obs_per_day = 15
+obs_per_day = 20
 t = np.linspace(0,n_days*obs_per_day,n_days*obs_per_day)
 N = len(t)
 #noise = np.random.lognormal(1,1.2,N)
 # make n_scen scenarios out of a detrended random walk
-n_scen = 100
+n_scen = 1
 R = np.random.randn(N,n_scen)
 W = np.zeros((N,n_scen))
 for i in np.arange(n_scen):
-    stdv = np.random.randn(1)
+    #stdv = np.random.randn(1)
+    stdv = 0.2
     w = np.zeros((N,1))
     for j in np.arange(N-1):
         w[j+1] = w[j] + R[j,i]*stdv
     W[:,i] = w.ravel()
 
-ma_len = int(obs_per_day/4)
+ma_len = int(obs_per_day*2)
 Ma = np.zeros((N,N))
 for i in np.arange(N):
     Ma[i,i:i+ma_len] = 1/ma_len
@@ -38,18 +39,20 @@ W_det = W - Ma.dot(W)
 W_det = W_det[:N,:]
 
 y = np.sin(t*n_days*2*np.pi/N)+ W_det[:,[0]].ravel()
-x_cos = np.cos(t*n_days/N)+np.random.rand(N)
+x_cos = np.cos(t*n_days*2*np.pi/N)
 y_past = y
 # henkelize
-X = []
+X = np.zeros((N-2*obs_per_day,2*obs_per_day))
 target = []
+i=0
 for e in np.arange(obs_per_day):
     win = e+np.linspace(0,N-2*obs_per_day-1,N-2*obs_per_day,dtype=int)
-    X.append(np.hstack([x_cos[win].reshape(-1,1),y_past[win].reshape(-1,1)]))
+    X[:, [i]] = x_cos[win].reshape(-1,1)
+    X[:, [i+obs_per_day]] = y_past[win].reshape(-1, 1)
     target.append(y[win+obs_per_day].reshape(-1,1))
+    i+=1
 
 dataset = {}
-X = np.hstack(X)
 target = np.hstack(target)
 
 #-------------- GENEARTE DATASET FOR ONLINE FORECASTING --------------------------------------
@@ -58,9 +61,9 @@ dataset['y_tr']= target[0:int(N*0.8),:]
 dataset['X_te']= X[int(N*0.8):,:]
 dataset['y_te'] = target[int(N*0.8):,:]
 
-reg = 'RELM'
+reg = 'rf'
 n_regressors = 200
-N_days = 2
+N_days = 5
 if reg == 'RELM':
     relm = RELM(dataset['X_te'],nodes=200,n_elms=n_regressors,lamb=1)
     relm.train(dataset['X_tr'],dataset['y_tr'])
@@ -92,16 +95,16 @@ plt.plot(y_i[0,:],linewidth=0.1)
 dt = 60*15
 pars = {'h':obs_per_day,
         'ts':np.atleast_1d(dt),
-        'ps':0.07,
-        'pb':0.2,
+        'ps':0.07*1e-10,
+        'pb':0.2*1e-10,
         'type':'stochastic',
         'alpha':1,
         'rho':1,
-        'n_final_scens':20,
-        'n_init_scens':5}
+        'n_final_scens':35,
+        'n_init_scens':1}
 
 n_pool = 5
-c_pool = np.linspace(0.5,1.2,n_pool)
+c_pool = np.linspace(1.5,2,n_pool)
 cap_pool = np.linspace(1,4,n_pool)
 KPI_det = np.zeros((n_pool,n_pool))
 KPI_stoc = np.zeros((n_pool,n_pool))
