@@ -3,7 +3,7 @@ import scipy.io as io
 from scenred import scenred, plot_scen, plot_graph
 import numpy as np
 import matplotlib
-matplotlib.use('Qt5Agg')
+#matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from _battery_controller import BatteryController
@@ -81,7 +81,7 @@ else:
 
 data = {}
 data['y_hat'] = y_hat
-data['scenarios'] = y_i
+data['scenarios'] = y_i+1e-6*np.random.randn(np.shape(y_i)[0],np.shape(y_i)[1],np.shape(y_i)[2])
 
 data_pre = {}
 data_pre['y_hat'] = dataset['y_te'][:obs_per_day*N_days,:]
@@ -100,8 +100,8 @@ pars = {'h':obs_per_day,
         'type':'stochastic',
         'alpha':1,
         'rho':1,
-        'n_final_scens':35,
-        'n_init_scens':1}
+        'n_final_scens':10,
+        'n_init_scens':3}
 
 n_pool = 5
 c_pool = np.linspace(1.5,2,n_pool)

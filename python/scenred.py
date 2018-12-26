@@ -153,7 +153,7 @@ def scenred(samples, **kwargs):
 
     Me = np.swapaxes(Me,2,0)
 
-    if np.shape(S)[1]<50:
+    if np.shape(S)[1]<100:
         g = get_network(S, P)
     else:
         print('Warning: automatic retrieval of the network graph has been disabled because the number of '

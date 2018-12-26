@@ -240,7 +240,7 @@ class Battery:
                     plt.legend()
                 fig.canvas.draw()
                 fig.canvas.flush_events()
-
+                plt.show()
         cost, peak_sh, cost_real, peak_sh_real = self.cost_KPI(P_obs)
 
         return self.history, cost, peak_sh, cost_real, peak_sh_real
@@ -255,6 +255,8 @@ class Battery:
         P_controlled, P_hat, U, E = self.battery_controller.solve_step(time,coord = coord)
         P_asked = np.atleast_1d(U[0, 0] - U[0, 1])*1e3      # convert in W
         P_battery_real,SOC_real,states = self.simulate(P_asked)
+        #P_battery_real = np.atleast_1d(P_asked)
+        #SOC_real = np.atleast_1d(self.battery_controller.x_start.value[0]/self.e_nom)
         P_final = P_hat[0] + P_battery_real/1e3         # convert back in kW
         self.history['P_cont'].append(P_controlled[0][0])
         self.history['P_cont_real'].append(P_final[0])
