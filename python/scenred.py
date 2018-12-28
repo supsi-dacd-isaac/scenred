@@ -199,13 +199,14 @@ def plot_graph(g):
     mapping = dict(zip(sorted(groups), count()))
     nodes = g.nodes()
     colors = [mapping[g.node[n]['v'][0]] for n in nodes]
+    p = np.array(list(nx.get_node_attributes(g, 'p').values()))
 
     # drawing nodes and edges separately so we can capture collection for colobar
     pos = graphviz_layout(g, prog='dot')
     # nx.draw_networkx(g,pos,with_labels=True)
     ec = nx.draw_networkx_edges(g, pos, alpha=0.2)
     nc = nx.draw_networkx_nodes(g, pos, nodelist=nodes, node_color=colors,
-                                with_labels=True, node_size=100, cmap=plt.cm.jet)
+                                with_labels=True, node_size=100*p, cmap=plt.cm.jet)
     ax.set_xticks([])
     ax.set_yticks([])
 
