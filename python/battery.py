@@ -92,8 +92,8 @@ class Battery:
         # battery constraints
         self.i_max = self.cap_nom*self.c_nom
         self.i_min = -self.cap_nom*self.c_nom
-        self.v_max = 810
-        self.v_min = 510
+        self.v_max = 810*1.5
+        self.v_min = 510*0.75
         self.SOC_max = 1
         self.SOC_min = 1-self.battery_controller_pars['dod']
 
@@ -116,6 +116,11 @@ class Battery:
             Bc = np.hstack(
                 [np.array([1 / self.id_pars["C_1"][i], 1 / self.id_pars["C_2"][i], 1 / self.id_pars["C_3"][i]]).reshape(-1, 1),
                  np.zeros((3, 1))])
+            #Ac = np.diag(np.array(
+            #   [-1 / (self.id_pars["R_1"][i] * self.id_pars["C_1"][i]), -1 / (self.id_pars["R_2"][i] * self.id_pars["C_2"][i])]))
+            #Bc = np.hstack(
+            #    [np.array([1 / self.id_pars["C_1"][i], 1 / self.id_pars["C_2"][i]]).reshape(-1, 1),
+            #    np.zeros((2, 1))])
             # rescale for nominal capacity
             Bc = Bc #* self.scaling_factor
 
@@ -134,13 +139,13 @@ class Battery:
         self.battery_simulators_m = []
 
         for i in np.arange(len(self.id_pars['R_s'])):
-            self.A_soc = self.A[i]
-            self.B_soc = self.B[i]
-            self.K_soc = self.K[i]
-            self.D_soc = self.D[i]
-            self.G_soc = self.G[i]
-            simulator_i, current, states, states_old, v, v_old, SOC_old, SOC, P, P_asked, randn = self._battery_simulator_plus()
-            simulator_i_m, current_m, states_m, states_old_m, v_m, v_old_m, SOC_old_m, SOC_m, P_m, P_asked_m, randn_m = self._battery_simulator_minus()
+            A = np.copy(self.A[i])
+            B = np.copy(self.B[i])
+            K = np.copy(self.K[i])
+            D = np.copy(self.D[i])
+            G = np.copy(self.G[i])
+            simulator_i, current, states, states_old, v, v_old, SOC_old, SOC, P, P_asked, randn = self._battery_simulator_plus(A,B,G,D)
+            simulator_i_m, current_m, states_m, states_old_m, v_m, v_old_m, SOC_old_m, SOC_m, P_m, P_asked_m, randn_m = self._battery_simulator_minus(A,B,G,D)
             self.i.append(current)
             self.states.append(states)
             states_old.value = self.states_init
@@ -254,9 +259,9 @@ class Battery:
 
         P_controlled, P_hat, U, E = self.battery_controller.solve_step(time,coord = coord)
         P_asked = np.atleast_1d(U[0, 0] - U[0, 1])*1e3      # convert in W
-        P_battery_real,SOC_real,states = self.simulate(P_asked)
-        #P_battery_real = np.atleast_1d(P_asked)
-        #SOC_real = np.atleast_1d(self.battery_controller.x_start.value[0]/self.e_nom)
+        #P_battery_real,SOC_real,states = self.simulate(P_asked)
+        P_battery_real = np.atleast_1d(P_asked)
+        SOC_real = np.atleast_1d(self.battery_controller.x_start.value[0]/self.e_nom)
         P_final = P_hat[0] + P_battery_real/1e3         # convert back in kW
         self.history['P_cont'].append(P_controlled[0][0])
         self.history['P_cont_real'].append(P_final[0])
@@ -265,7 +270,7 @@ class Battery:
         self.history['P_battery_real'].append(P_battery_real[0]/1e3)
         self.history['SOC_real'].append(SOC_real[0])
         self.history['SOC'].append(self.battery_controller.x_start.value[0]/self.e_nom)
-
+        #print(P_asked[0]/1e3,P_battery_real[0]/1e3)
         return P_final, P_controlled, P_hat, U, E
 
 
@@ -278,12 +283,15 @@ class Battery:
         '''
 
         # find which parameters must be used, based on SOC
+        #print(P_asked,self.SOC[0].value,self.SOC_min)
         ss_idx = int(np.argmin(np.abs(self.SOC[0].value-self.SOC_vect)))
         # find current setpoint, given P
         if P_asked>=0:
             self.P_asked[ss_idx].value = P_asked
             self.randn[ss_idx].value = np.random.randn(1)
-            self.battery_simulators[ss_idx].solve(solver='CVXOPT')
+            self.battery_simulators[ss_idx].solve(solver='SCS',verbose=True)
+            if self.SOC[ss_idx].value <0:
+                print('error')
             # reconcile all the variables
             for i in np.arange(len(self.v_old)):
                 # update old voltage
@@ -310,7 +318,9 @@ class Battery:
         else:
             self.P_asked_m[ss_idx].value = P_asked
             self.randn_m[ss_idx].value = np.random.randn(1)
-            self.battery_simulators_m[ss_idx].solve(solver='CVXOPT')
+            self.battery_simulators_m[ss_idx].solve(solver='SCS',verbose=True)
+            if self.SOC_m[ss_idx].value <0:
+                print('error')
             # reconcile all the variables
             for i in np.arange(len(self.v_old)):
                 # update old voltage
@@ -363,7 +373,7 @@ class Battery:
         return pars
 
 
-    def _battery_simulator_plus(self):
+    def _battery_simulator_plus(self,A,B,G,D):
 
         i = cvx.Variable(1)
         states = cvx.Variable((3,1))
@@ -380,7 +390,7 @@ class Battery:
 
         # current constraints
         constraints = [i <= self.i_max]
-        constraints.append(i>= self.i_min)
+        constraints.append(i>= 0)
 
         # voltage constraints
         constraints.append(v <= self.v_max)
@@ -389,47 +399,8 @@ class Battery:
         constraints.append(SOC <= self.SOC_max)
         constraints.append(SOC >= self.SOC_min)
         # dynamics - v
-        constraints.append(states == self.A_soc*states_old + self.B_soc[:,[0]]*i)
-        constraints.append(v == cvx.sum(states)/self.scaling_factor + self.D_soc[0,0]*i + self.D_soc[0,1] + self.G_soc*randn)
-
-        # dynamics - SOC
-        constraints.append(SOC == SOC_old + i*self.dt/self.cap_nom/3600)
-
-        # constraint on requested energy
-        constraints.append(P == v_old*i )
-        constraints.append(P <= P_asked)
-        simulator = cvx.Problem(cvx.Maximize(i), constraints)
-
-        return simulator,i,states,states_old,v,v_old,SOC_old,SOC,P,P_asked,randn
-
-    def _battery_simulator_minus(self):
-
-        i = cvx.Variable(1)
-        states = cvx.Variable((3,1))
-        v = cvx.Variable(1)
-        P = cvx.Variable(1)
-        SOC = cvx.Variable(1)
-        one_vec = np.ones((1,3))
-
-        v_old = cvx.Parameter(1)
-        P_asked = cvx.Parameter(1)
-        SOC_old = cvx.Parameter(1)
-        states_old = cvx.Parameter((3,1))
-        randn = cvx.Parameter(1)
-
-        # current constraints
-        constraints = [i <= self.i_max]
-        constraints.append(i>= self.i_min)
-
-        # voltage constraints
-        constraints.append(v <= self.v_max)
-        constraints.append(v >= self.v_min)
-        # SOC constraints
-        constraints.append(SOC <= self.SOC_max)
-        constraints.append(SOC >= self.SOC_min)
-        # dynamics - v
-        constraints.append(states == self.A_soc*states_old + self.B_soc[:,[0]]*i)
-        constraints.append(v == cvx.sum(states)/self.scaling_factor + self.D_soc[0,0]*i + self.D_soc[0,1] + self.G_soc*randn)
+        constraints.append(states == A*states_old + B[:,[0]]*i)
+        constraints.append(v == cvx.sum(states)/self.scaling_factor + D[0,0]*i + D[0,1] + G*randn)
 
         # dynamics - SOC
         constraints.append(SOC == SOC_old + i*self.dt/self.cap_nom/3600)
@@ -437,7 +408,48 @@ class Battery:
         # constraint on requested energy
         constraints.append(P == v_old*i )
         constraints.append(P >= P_asked)
+        simulator = cvx.Problem(cvx.Maximize(i), constraints)
+        #simulator = cvx.Problem(cvx.Minimize(cvx.norm1(P-P_asked)), constraints)
+
+        return simulator,i,states,states_old,v,v_old,SOC_old,SOC,P,P_asked,randn
+
+    def _battery_simulator_minus(self,A,B,G,D):
+
+        i = cvx.Variable(1)
+        states = cvx.Variable((3,1))
+        v = cvx.Variable(1)
+        P = cvx.Variable(1)
+        SOC = cvx.Variable(1)
+        one_vec = np.ones((1,3))
+
+        v_old = cvx.Parameter(1)
+        P_asked = cvx.Parameter(1)
+        SOC_old = cvx.Parameter(1)
+        states_old = cvx.Parameter((3,1))
+        randn = cvx.Parameter(1)
+
+        # current constraints
+        constraints = [i <= 0]
+        constraints.append(i>= self.i_min)
+
+        # voltage constraints
+        constraints.append(v <= self.v_max)
+        constraints.append(v >= self.v_min)
+        # SOC constraints
+        constraints.append(SOC <= self.SOC_max)
+        constraints.append(SOC >= self.SOC_min)
+        # dynamics - v
+        constraints.append(states == A*states_old + B[:,[0]]*i)
+        constraints.append(v == cvx.sum(states)/self.scaling_factor + D[0,0]*i + D[0,1] + G*randn)
+
+        # dynamics - SOC
+        constraints.append(SOC == SOC_old + i*self.dt/self.cap_nom/3600)
+
+        # constraint on requested energy
+        constraints.append(P == v_old*i )
+        constraints.append(P <= P_asked)
         simulator = cvx.Problem(cvx.Minimize(i), constraints)
+        #simulator = cvx.Problem(cvx.Minimize(cvx.norm1(P-P_asked)), constraints)
 
         return simulator,i,states,states_old,v,v_old,SOC_old,SOC,P,P_asked,randn
 

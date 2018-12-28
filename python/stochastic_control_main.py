@@ -21,8 +21,8 @@ f = h5py.File(filename, 'r')
 # parameters
 forecasters = ['_hw','_relm','','rfhw']
 n = 0
-n_pool = 5
-n_days = 5
+n_pool = 4
+n_days = 2
 n_forecasters = len(forecasters)
 
 KPI_det = np.zeros((n_pool,n_pool,6,n_forecasters))
@@ -38,6 +38,15 @@ dt = 60*15*steps_size
 f_counter = -1
 for fore in forecasters:
     f_counter +=1
+
+    # battery sizing
+    p_periods = []
+    for k in np.arange(6):
+        p_i = f[f['bf']['y_te'][k][n]].value.T[0:96*n_days,0]
+        p_periods.append(p_i)
+    p_periods = np.hstack(p_periods)
+    e_out_daily = np.abs(np.sum(p_periods[p_periods < 0]) * dt[0] / 3600 / n_days /6) # daily avarage produced energy in kWh
+
     for k in np.arange(6):
 
         if fore=='rfhw':
@@ -69,11 +78,11 @@ for fore in forecasters:
         data_pre['scenarios'] = y_i
 
         # set parameter pool
-        e_out_daily = np.sum(y_hat[:, 0]) * dt[0] / 3600 / n_days # daily avarage produced energy in kWh
 
         c_pool = np.linspace(0.5, 2, n_pool)
         cap_pool = np.linspace(0.5, 2, n_pool)*e_out_daily
         # plot some data
+        '''
         fig,ax = plt.subplots(1)
         plt.show()
         for i in np.arange(np.minimum(y_i.shape[0],100)):
@@ -83,7 +92,7 @@ for fore in forecasters:
             plt.plot(np.squeeze(y_i[i,:,:]),linewidth=0.1)
             fig.canvas.draw()
             fig.canvas.flush_events()
-
+        '''
         #-------------- BATTERY SETUP --------------------------------------
 
         h = y_hat.shape[1]
@@ -94,8 +103,8 @@ for fore in forecasters:
                 'type':'stochastic',
                 'alpha':1,
                 'rho':1,
-                'n_final_scens':20,
-                'n_init_scens':5}
+                'n_final_scens':40,
+                'n_init_scens':10}
 
         for i in np.arange(n_pool):
             for j in np.arange(n_pool):
@@ -114,9 +123,9 @@ for fore in forecasters:
 
                 n_steps = y_te.shape[0]
                 P_obs = y_te[:,[0]]
-                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=True)
-                history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre= pre_batt.do_mpc(n_steps, P_obs,do_plots=True)
-                history_det, cost_det, peak_sh_det, cost_real_det, peak_sh_real_det = det_batt.do_mpc(n_steps, P_obs,do_plots=True)
+                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=False)
+                history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre= pre_batt.do_mpc(n_steps, P_obs,do_plots=False)
+                history_det, cost_det, peak_sh_det, cost_real_det, peak_sh_real_det = det_batt.do_mpc(n_steps, P_obs,do_plots=False)
 
                 fig, ax = plt.subplots(2)
                 ax[0].clear()
@@ -145,7 +154,7 @@ for fore in forecasters:
                 KPI_pre_real[i, j, k,f_counter] = np.sum(cost_real_pre + peak_sh_real_pre)
 
                 dtime = time()-t1
-                print(dtime/60, c,cap,(KPI_det[i, j,k]-KPI_stoc[i, j,k])/KPI_stoc[i, j,k],(KPI_det_real[i, j,k]-KPI_stoc_real[i, j,k])/KPI_stoc_real[i, j,k])
+                print(dtime/60, c,cap,(KPI_det[i, j,k,f_counter]-KPI_stoc[i, j,k,f_counter])/KPI_stoc[i, j,k,f_counter],(KPI_det_real[i, j,k,f_counter]-KPI_stoc_real[i, j,k,f_counter])/KPI_stoc_real[i, j,k,f_counter])
 
                 plt.close('all')
 
@@ -156,5 +165,5 @@ for fore in forecasters:
     results['KPT_det_real'] = KPI_det_real
     results['KPT_stoc_real'] = KPI_stoc_real
     results['KPT_pre_real'] = KPI_pre_real
-    np.save('results/results', results)
+    np.save('results/results_10_40', results)
 
