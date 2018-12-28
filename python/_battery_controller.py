@@ -279,8 +279,9 @@ class BatteryController:
         elif self.pars['type'] in ['stochastic','distributed','peak_shaving','dist_stoc']:
             ref = cvx.Parameter((self.Tcvx.shape[0], 1))
             dsch_punish = cvx.Parameter((1,self.Tcvx.shape[0]))
-            u_punish = 1e-6 * cvx.sum_squares(u)
-            cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))+pm-ref)+u_punish
+            #u_punish = 1e-6 * cvx.sum_squares(u)
+            #cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))+pm-ref)
+            cost = one_v * y + dsch_punish * u[:, 1] + k * cvx.sum((u[:,[0]]-u[:,[1]] + pm - ref)**2)
         else:
             raise TypeError('pars["type"] not recognized')
 
@@ -349,7 +350,7 @@ class BatteryController:
         dsch_punish = cvx.Parameter((1,n_n))
 
         batt_punish = dsch_punish * cvx.diag(p) * u[:, [1]]
-        u_punish = 1e-6 * (u[:, [1]].T* cvx.diag(p.T) * u[:, [1]] + u[:, [0]].T* cvx.diag(p.T) * u[:, [0]])
+        #u_punish = 1e-6 * (u[:, [1]].T* cvx.diag(p.T) * u[:, [1]] + u[:, [0]].T* cvx.diag(p.T) * u[:, [0]])
         ref_punish = k * p * (u[:, [0]] - u[:, [1]] + pm - ref)**2
         cost = p * y + batt_punish + ref_punish
 
@@ -395,7 +396,7 @@ class BatteryController:
             try:
                 self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
             except:
-                print('vacca maiala')
+                print('vacca maiala',np.shape(np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)),np.shape(self.p_st.value))
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
             self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
