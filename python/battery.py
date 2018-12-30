@@ -552,8 +552,8 @@ class Battery:
         p_b = self.battery_controller_pars['pb']
         Pm = P_obs + np.array(self.history['P_battery']).reshape(-1,1)
         Pm_real = P_obs + np.array(self.history['P_battery_real']).reshape(-1,1)
-        cost = self.dt*Pm*((Pm>=0)*p_b + (Pm<0)*p_s)
-        cost_real = self.dt*Pm_real*((Pm_real>=0)*p_b + (Pm_real<0)*p_s)
+        cost = self.dt[0]*Pm*((Pm>=0)*p_b + (Pm<0)*p_s)
+        cost_real = self.dt[0]*Pm_real*((Pm_real>=0)*p_b + (Pm_real<0)*p_s)
         peak_sh = 0.5*Pm**2
         peak_sh_real = 0.5*Pm_real**2
 

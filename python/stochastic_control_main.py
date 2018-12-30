@@ -33,6 +33,22 @@ KPI_det_real = np.zeros((n_pool,n_pool,6,n_forecasters))
 KPI_stoc_real = np.zeros((n_pool,n_pool,6,n_forecasters))
 KPI_pre_real = np.zeros((n_pool,n_pool,6,n_forecasters))
 
+KPI_c_det = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_c_stoc = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_c_pre = np.zeros((n_pool,n_pool,6,n_forecasters))
+
+KPI_c_det_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_c_stoc_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_c_pre_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+
+KPI_p_det = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_p_stoc = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_p_pre = np.zeros((n_pool,n_pool,6,n_forecasters))
+
+KPI_p_det_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_p_stoc_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+KPI_p_pre_real = np.zeros((n_pool,n_pool,6,n_forecasters))
+
 steps_size = np.array([1,1,2,3,5,7,10,15,21,31])
 dt = 60*15*steps_size
 f_counter = -1
@@ -103,8 +119,8 @@ for fore in forecasters:
                 'type':'stochastic',
                 'alpha':1,
                 'rho':1,
-                'n_final_scens':40,
-                'n_init_scens':10}
+                'n_final_scens':20,
+                'n_init_scens':5}
 
         for i in np.arange(n_pool):
             for j in np.arange(n_pool):
@@ -148,10 +164,24 @@ for fore in forecasters:
                 KPI_det[i, j,k,f_counter]  = np.sum(cost_det + peak_sh_det)
                 KPI_stoc[i, j,k,f_counter] = np.sum(cost_stoc + peak_sh_stoc)
                 KPI_pre[i, j, k,f_counter] = np.sum(cost_pre + peak_sh_pre)
-
                 KPI_det_real[i, j,k,f_counter]  = np.sum(cost_real_det + peak_sh_real_det)
                 KPI_stoc_real[i, j,k,f_counter] = np.sum(cost_real_stoc + peak_sh_real_stoc)
                 KPI_pre_real[i, j, k,f_counter] = np.sum(cost_real_pre + peak_sh_real_pre)
+
+                KPI_c_det[i, j,k,f_counter]  = np.sum(cost_det)
+                KPI_c_stoc[i, j,k,f_counter] = np.sum(cost_stoc)
+                KPI_c_pre[i, j, k,f_counter] = np.sum(cost_pre)
+                KPI_c_det_real[i, j,k,f_counter]  = np.sum(cost_real_det)
+                KPI_c_stoc_real[i, j,k,f_counter] = np.sum(cost_real_stoc)
+                KPI_c_pre_real[i, j, k,f_counter] = np.sum(cost_real_pre)
+
+                KPI_p_det[i, j,k,f_counter]  = np.sum(peak_sh_det)
+                KPI_p_stoc[i, j,k,f_counter] = np.sum(peak_sh_stoc)
+                KPI_p_pre[i, j, k,f_counter] = np.sum(peak_sh_pre)
+                KPI_p_det_real[i, j,k,f_counter]  = np.sum(peak_sh_real_det)
+                KPI_p_stoc_real[i, j,k,f_counter] = np.sum(peak_sh_real_stoc)
+                KPI_p_pre_real[i, j, k,f_counter] = np.sum(peak_sh_real_pre)
+
 
                 dtime = time()-t1
                 print(dtime/60, c,cap,(KPI_det[i, j,k,f_counter]-KPI_stoc[i, j,k,f_counter])/KPI_stoc[i, j,k,f_counter],(KPI_det_real[i, j,k,f_counter]-KPI_stoc_real[i, j,k,f_counter])/KPI_stoc_real[i, j,k,f_counter])
@@ -165,5 +195,20 @@ for fore in forecasters:
     results['KPT_det_real'] = KPI_det_real
     results['KPT_stoc_real'] = KPI_stoc_real
     results['KPT_pre_real'] = KPI_pre_real
-    np.save('results/results_10_40', results)
+
+    results['KPT_c_det'] = KPI_c_det
+    results['KPT_c_stoc'] = KPI_c_stoc
+    results['KPT_c_pre'] = KPI_c_pre
+    results['KPT_c_det_real'] = KPI_c_det_real
+    results['KPT_c_stoc_real'] = KPI_c_stoc_real
+    results['KPT_c_pre_real'] = KPI_c_pre_real
+
+    results['KPT_p_det'] = KPI_p_det
+    results['KPT_p_stoc'] = KPI_p_stoc
+    results['KPT_p_pre'] = KPI_p_pre
+    results['KPT_p_det_real'] = KPI_p_det_real
+    results['KPT_p_stoc_real'] = KPI_p_stoc_real
+    results['KPT_p_pre_real'] = KPI_p_pre_real
+
+    np.save('results/results_5_10', results)
 
