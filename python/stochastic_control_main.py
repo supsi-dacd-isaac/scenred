@@ -67,11 +67,11 @@ for fore in forecasters:
 
         if fore=='rfhw':
             # merge hw and rf forecasters
-            y_hat_hw = f[f['bf']['y_hat_hw'][k][n]].value.T[0:96 * n_days, :] * steps_size.reshape(1, -1)
-            y_hat_rf = f[f['bf']['y_hat'][k][n]].value.T[0:96 * n_days, :] * steps_size.reshape(1, -1)
-            y_i_hw = f[f['bf']['y_i_hw'][k][n]].value.T[0:96 * n_days, :, :] * steps_size.reshape(1, -1, 1)
+            y_hat_hw = f[f['bf']['y_hat_hw'][k][n]].value.T[0:96 * n_days, :] #* steps_size.reshape(1, -1)
+            y_hat_rf = f[f['bf']['y_hat'][k][n]].value.T[0:96 * n_days, :] #* steps_size.reshape(1, -1)
+            y_i_hw = f[f['bf']['y_i_hw'][k][n]].value.T[0:96 * n_days, :, :] #* steps_size.reshape(1, -1, 1)
             y_i_hw = y_i_hw + 1e-6 * np.random.randn(y_i_hw.shape[0], y_i_hw.shape[1], y_i_hw.shape[2])
-            y_i_rf = f[f['bf']['y_i'][k][n]].value.T[0:96 * n_days, :, :] * steps_size.reshape(1, -1, 1)
+            y_i_rf = f[f['bf']['y_i'][k][n]].value.T[0:96 * n_days, :, :] #* steps_size.reshape(1, -1, 1)
             y_i_rf = y_i_rf + 1e-6 * np.random.randn(y_i_rf.shape[0], y_i_rf.shape[1], y_i_rf.shape[2])
             y_hat = y_hat_hw
             y_hat[:,1:] = y_hat_rf[:,1:]
@@ -79,11 +79,11 @@ for fore in forecasters:
             y_i[:, 1:, :] = y_i_rf[:, 1:, :]
         else:
             # rename stuff
-            y_hat = f[f['bf']['y_hat'+fore][k][n]].value.T[0:96*n_days,:]*steps_size.reshape(1,-1)
-            y_i = f[f['bf']['y_i'+fore][k][n]].value.T[0:96*n_days,:,:]*steps_size.reshape(1,-1,1)
+            y_hat = f[f['bf']['y_hat'+fore][k][n]].value.T[0:96*n_days,:] #* steps_size.reshape(1,-1)
+            y_i = f[f['bf']['y_i'+fore][k][n]].value.T[0:96*n_days,:,:]#* steps_size.reshape(1,-1,1)
             y_i = y_i + 1e-6*np.random.randn(y_i.shape[0],y_i.shape[1],y_i.shape[2])
 
-        y_te = f[f['bf']['y_te'][k][n]].value.T[0:96 * n_days, :] * steps_size.reshape(1, -1)
+        y_te = f[f['bf']['y_te'][k][n]].value.T[0:96 * n_days, :] #* steps_size.reshape(1, -1)
         data = {}
         data['y_te'] = y_te
         data['y_hat'] = y_hat
@@ -210,5 +210,5 @@ for fore in forecasters:
     results['KPT_p_stoc_real'] = KPI_p_stoc_real
     results['KPT_p_pre_real'] = KPI_p_pre_real
 
-    np.save('results/results_5_10', results)
+    np.save('results/results_5_10_c2', results)
 
