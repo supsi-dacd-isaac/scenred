@@ -253,7 +253,10 @@ class BatteryController:
         u = cvx.Variable((H, 2))
         pm = cvx.Parameter((H, 1))
         x_start = cvx.Parameter(1)
-        one_v = np.ones((1, H))
+        if np.size(self.Ad) > 1:
+            one_v = self.pars['ts'].reshape(1,-1)/900
+        else:
+            one_v = np.ones((1, H))
         constraints = [x[1:] <= self.x_u]
         if np.size(self.Ad)>1:
             assert np.size(self.Ad) == H , 'Error:length of ts must be equal to the horizon'
@@ -281,7 +284,7 @@ class BatteryController:
             dsch_punish = cvx.Parameter((1,self.Tcvx.shape[0]))
             #u_punish = 1e-6 * cvx.sum_squares(u)
             #cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))+pm-ref)
-            cost = one_v * y + dsch_punish * u[:, 1] + k * cvx.sum((u[:,[0]]-u[:,[1]] + pm - ref)**2)
+            cost = one_v * y + dsch_punish * u[:, 1] + k * one_v * ((u[:,[0]]-u[:,[1]] + pm - ref)**2)
         else:
             raise TypeError('pars["type"] not recognized')
 
@@ -316,6 +319,10 @@ class BatteryController:
         x_start = cvx.Parameter(1)
         # probabilities vector
         all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+        if np.size(self.Ad) > 1:
+            weights = np.array([self.pars['ts'][i] for i in all_t]).reshape(1,-1)/900
+        else:
+            weights = np.ones((1,len(self.pars['ts'])))
         t = np.unique(all_t)
         leafs = np.array([ n  for n in  node_set[all_t==np.max(t)]])
         x_leafs = cvx.Variable((len(leafs), 1))
@@ -349,10 +356,10 @@ class BatteryController:
         ref = cvx.Parameter((n_n, 1))
         dsch_punish = cvx.Parameter((1,n_n))
 
-        batt_punish = dsch_punish * cvx.diag(p) * u[:, [1]]
+        batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
         #u_punish = 1e-6 * (u[:, [1]].T* cvx.diag(p.T) * u[:, [1]] + u[:, [0]].T* cvx.diag(p.T) * u[:, [0]])
-        ref_punish = k * p * (u[:, [0]] - u[:, [1]] + pm - ref)**2
-        cost = p * y + batt_punish + ref_punish
+        ref_punish = k * (cvx.multiply(p,weights)) * (u[:, [0]] - u[:, [1]] + pm - ref)**2
+        cost = cvx.multiply(p,weights) * y + batt_punish + ref_punish
 
        # for i in np.arange(n_n):
         #     #u_punish = 1e-6 * p[0,i] * ((u[i, [0]])**2 + (u[i, [1]])**2 )
@@ -400,7 +407,7 @@ class BatteryController:
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
             self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
-            solution = self.cvx_solver_st.solve()
+            solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=True)
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
                     self.u_st.value[0, :].reshape(-1, 1)).flatten()
@@ -423,7 +430,7 @@ class BatteryController:
             if self.pars['type'] == 'peak_shaving':
                 self.ref.value = ref
                 self.dsch_punish.value = 1*(self.pm.value<ref).T
-            solution = self.cvx_solver.solve()
+            solution = self.cvx_solver.solve(solver = 'ECOS',warm_start=True)
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
                     self.u.value[0, :].reshape(-1, 1)).flatten()
