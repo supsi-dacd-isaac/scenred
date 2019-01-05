@@ -223,12 +223,14 @@ class Battery:
                 line_colors = cmap(np.linspace(0, 1, 6))
                 if self.battery_controller_pars['type'] in ['stochastic','dist_stoc']:
                     for s in np.arange(self.battery_controller.scen_idxs.shape[1]):
+                        P_hat_mean,a,b = self.battery_controller.forecaster.predict(t)
                         U_data = U[self.battery_controller.scen_idxs[:, s].ravel(), :]
                         E_n = E[self.battery_controller.scen_idxs[:, s].ravel(), :]
                         P_hat_plt = P_hat[self.battery_controller.scen_idxs[:, s].ravel()]
                         Pcontdata = P_hat_plt + U_data[:, [0]] - U_data[:, [1]]
                         ax[0].plot(Pcontdata,label='cont',color=line_colors[0,:],linewidth=0.5,alpha = 0.2)
                         ax[0].plot(P_hat_plt,label='hat',color=line_colors[1,:],linewidth=0.5,alpha = 0.2)
+                        ax[0].plot(P_hat_mean,label='hat_mean',color=line_colors[1,:],linewidth=0.5,alpha = 1)
                         ax[1].plot(U_data[:,0],label='Pin',color=line_colors[2,:],linewidth=0.5,alpha = 0.2)
                         ax[1].plot(U_data[:,1],label='Pout',color=line_colors[3,:],linewidth=0.5,alpha = 0.2)
                         ax[1].plot(E_n,label = 'E',color=line_colors[4,:],linewidth=0.5,alpha = 0.2)
@@ -552,8 +554,8 @@ class Battery:
         p_b = self.battery_controller_pars['pb']
         Pm = P_obs + np.array(self.history['P_battery']).reshape(-1,1)
         Pm_real = P_obs + np.array(self.history['P_battery_real']).reshape(-1,1)
-        cost = self.dt[0]*Pm*((Pm>=0)*p_b + (Pm<0)*p_s)
-        cost_real = self.dt[0]*Pm_real*((Pm_real>=0)*p_b + (Pm_real<0)*p_s)
+        cost = Pm*((Pm>=0)*p_b + (Pm<0)*p_s)
+        cost_real = Pm_real*((Pm_real>=0)*p_b + (Pm_real<0)*p_s)
         peak_sh = 0.5*Pm**2
         peak_sh_real = 0.5*Pm_real**2
 

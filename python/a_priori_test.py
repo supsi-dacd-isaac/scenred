@@ -29,6 +29,7 @@ n_pool = 4
 KPI_c = np.zeros((n_pool,n_pool,len(N_steps),n_folds))
 KPI_s = np.zeros((n_pool,n_pool,len(N_steps),n_folds))
 KPI = np.zeros((n_pool,n_pool,len(N_steps),n_folds))
+times = np.zeros((n_pool,n_pool,len(N_steps),n_folds))
 
 for s in np.arange(N_steps.shape[0]):
     # chose log-spaced steps
@@ -97,10 +98,27 @@ for s in np.arange(N_steps.shape[0]):
                 pre_batt = battery.Battery(dataset=data_pre, pars=pars, c_nom=c, cap_nom=cap)
                 history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre = pre_batt.do_mpc(n_steps, P_hat[:,[0]],
                                                                                                       do_plots=False)
-                KPI_c[i, j, s, f] = np.sum(cost_pre)
+                fig, ax = plt.subplots(1)
+                ax.clear()
+                ax.plot(history_pre['P_obs'],label='observed')
+                ax.plot(history_pre['P_obs_cont'],'--',label='controlled')
+                ax.legend()
+                fig.canvas.draw()
+                fig.canvas.flush_events()
+                plt.show()
+
+                KPI_c[i, j, s, f] = np.sum(cost_pre)/4 # transform in $/kWh
                 KPI_s[i, j, s, f] = np.sum(peak_sh_pre)
                 KPI[i, j, s, f] = np.sum(cost_pre) + np.sum(peak_sh_pre)
                 dtime = time() - t1
                 print(dtime/60,KPI[i,j,s,f],c,cap,N_steps[s])
+                times[i, j, s, f] = dtime
+        plt.close('all')
 
+results = {}
+results['KPI'] = KPI
+results['KPI_c'] = KPI_c
+results['KPI_s'] = KPI_s
+results['times'] = times
 
+np.save('results/a_priori_results', results)

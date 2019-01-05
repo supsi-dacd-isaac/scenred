@@ -254,7 +254,7 @@ class BatteryController:
         pm = cvx.Parameter((H, 1))
         x_start = cvx.Parameter(1)
         if np.size(self.Ad) > 1:
-            one_v = self.pars['ts'].reshape(1,-1)/900
+            one_v = self.pars['ts'].reshape(1,-1)/900/96
         else:
             one_v = np.ones((1, H))
         constraints = [x[1:] <= self.x_u]
@@ -320,7 +320,7 @@ class BatteryController:
         # probabilities vector
         all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
         if np.size(self.Ad) > 1:
-            weights = np.array([self.pars['ts'][i] for i in all_t]).reshape(1,-1)/900
+            weights = np.array([self.pars['ts'][i] for i in all_t]).reshape(1,-1)/900/96
         else:
             weights = np.ones((1,len(self.pars['ts'])))
         t = np.unique(all_t)
@@ -407,7 +407,12 @@ class BatteryController:
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
             self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
-            solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=True)
+            try:
+                solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=True)
+            except:
+                solution = self.cvx_solver_st.solve(solver='SCS', warm_start=True)
+                print('revert to SCS solver')
+
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
                     self.u_st.value[0, :].reshape(-1, 1)).flatten()
@@ -430,7 +435,12 @@ class BatteryController:
             if self.pars['type'] == 'peak_shaving':
                 self.ref.value = ref
                 self.dsch_punish.value = 1*(self.pm.value<ref).T
-            solution = self.cvx_solver.solve(solver = 'ECOS',warm_start=True)
+            try:
+                solution = self.cvx_solver.solve(solver = 'ECOS',warm_start=True)
+            except:
+                solution = self.cvx_solver.solve(solver='SCS', warm_start=True)
+                print('revert to SCS solver')
+
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
                     self.u.value[0, :].reshape(-1, 1)).flatten()
