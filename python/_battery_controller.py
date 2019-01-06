@@ -153,6 +153,7 @@ class BatteryController:
         self.p_st = None
         self.dsch_punish_st = None
         self.scen_idxs = None
+        self.pm0 = None
 
         self.x_mat = None
         self.b_mat = None
@@ -219,7 +220,7 @@ class BatteryController:
             if self.forecaster_type == 'online':
                 g,S_s = self.forecaster.predict_scenarios(0)
             elif self.forecaster_type == 'pre-trained':
-                g,S_s = self.forecaster.predict_scenarios(time=0)
+                g,S_s,Sinit = self.forecaster.predict_scenarios(time=0)
             self.g = g
             self.build_stochastic_cvx_solver(k)
         else:
@@ -319,8 +320,11 @@ class BatteryController:
         x_start = cvx.Parameter(1)
         # probabilities vector
         all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+        n_scen_1 = np.sum(all_t == 1)
+        pm0 = cvx.Parameter((n_scen_1,1))
         if np.size(self.Ad) > 1:
             weights = np.array([self.pars['ts'][i] for i in all_t]).reshape(1,-1)/900/96
+        #weights = np.ones((1,len(all_t)))
         else:
             weights = np.ones((1,len(self.pars['ts'])))
         t = np.unique(all_t)
@@ -337,7 +341,7 @@ class BatteryController:
             scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
             scen_idxs_hist[:,s] = scen_idxs
             if np.size(self.Ad) > 1:
-                constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == np.diag(self.Ad) * x[scen_idxs] + cvx.reshape(cvx.diag(u[scen_idxs,:] * self.Bd.T), (len(self.Ad), 1)))
+                constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == np.diag(self.Ad) * x[scen_idxs] + cvx.reshape(cvx.sum(cvx.multiply(u[scen_idxs,:] , self.Bd),1),(len(self.Bd),1)))  #cvx.reshape(cvx.diag(u[scen_idxs,:] * self.Bd.T), (len(self.Ad), 1)))
                 #constraints.append(x[scen_idxs[1:]] == np.diag(self.Ad[0:-1]) * x[scen_idxs[0:-1]] + cvx.reshape(cvx.diag(u[scen_idxs[0:-1],:] * self.Bd.T[:,:-1]), (len(self.Ad)-1, 1)))
             else:
                 constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == self.Ad * x[scen_idxs] + u[scen_idxs,:] * self.Bd.T)
@@ -356,10 +360,13 @@ class BatteryController:
         ref = cvx.Parameter((n_n, 1))
         dsch_punish = cvx.Parameter((1,n_n))
 
-        batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
-        #u_punish = 1e-6 * (u[:, [1]].T* cvx.diag(p.T) * u[:, [1]] + u[:, [0]].T* cvx.diag(p.T) * u[:, [0]])
-        ref_punish = k * (cvx.multiply(p,weights)) * (u[:, [0]] - u[:, [1]] + pm - ref)**2
-        cost = cvx.multiply(p,weights) * y + batt_punish + ref_punish
+        #batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
+        batt_punish = dsch_punish * cvx.multiply(p.T,u[:, [1]])
+        #ref_punish = k * (cvx.multiply(p, weights)) * (u[:, [0]] - u[:, [1]] + pm - ref) ** 2
+        ref_punish = k * (cvx.multiply(p[[0],1:],weights[[0],1:])) * (u[1:, [0]] - u[1:, [1]] + pm[1:] - ref[1:])**2
+        for i in np.arange(n_scen_1):
+            ref_punish += k * weights[0,0]*(u[0, [0]] - u[0, [1]] + pm0[i,0] - ref[0])**2/n_scen_1
+        cost = cvx.multiply(p,weights) * y + ref_punish #+ batt_punish
 
        # for i in np.arange(n_n):
         #     #u_punish = 1e-6 * p[0,i] * ((u[i, [0]])**2 + (u[i, [1]])**2 )
@@ -388,13 +395,15 @@ class BatteryController:
         self.x_st = x
         self.dsch_punish_st = dsch_punish
         self.scen_idxs = scen_idxs_hist
+        self.pm0 = pm0
 
     def solve_step(self,time,ref=None,coord=False):
 
         #P_hat = self.P_hat
         if self.pars['type'] in ['stochastic','dist_stoc']:
             if self.P_hat is None:
-                self.P_hat, Ss = self.forecaster.predict_scenarios(time)
+                self.P_hat, Ss, Pm0 = self.forecaster.predict_scenarios(time)
+                self.pm0.value = Pm0.reshape(-1,1)
             # P must be a networkx graph
             # default reference does peak shaving
             if ref is None:
@@ -406,7 +415,7 @@ class BatteryController:
                 print('vacca maiala',np.shape(np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)),np.shape(self.p_st.value))
             self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             self.ref_st.value = ref
-            self.dsch_punish_st.value = 1*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
+            self.dsch_punish_st.value = 100*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
             try:
                 solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=True)
             except:
@@ -434,7 +443,7 @@ class BatteryController:
             self.pm.value = self.P_hat
             if self.pars['type'] == 'peak_shaving':
                 self.ref.value = ref
-                self.dsch_punish.value = 1*(self.pm.value<ref).T
+                self.dsch_punish.value = 100*(self.pm.value<ref).T
             try:
                 solution = self.cvx_solver.solve(solver = 'ECOS',warm_start=True)
             except:

@@ -284,5 +284,11 @@ class pre_trained_forecaster:
         scen_t = np.squeeze(self.scenarios[time,:,:])
         [S_s, P_s, J_s, Me_s, g] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric='cityblock',
                                            nodes=self.scenarios_per_step)
-        return g, S_s
+        scen_t = np.vstack([scen_t[[0],:],scen_t])
+        scenarios_per_step = np.insert(self.scenarios_per_step,1,self.scenarios_per_step[1])
+        [S_init, P_sn, J_sn, Me_sn, gn] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric='cityblock',
+                                           nodes=scenarios_per_step)
+        S_init = np.unique(S_init[1,:])
+
+        return g, S_s, S_init
 
