@@ -15,14 +15,14 @@ from time import time
 
 np.random.seed(0)
 
-filename = '/home/queen/Documents/ISAAC_matlab_svn/BB_forecasting/hierarchical_forecast/Data/base_forecasters_control.mat'
+filename = '/home/lorenzo/Documents/ISAAC_mat_svn/BB_forecasting/hierarchical_forecast/Data/base_forecasters_control.mat'
 f = h5py.File(filename, 'r')
 
 # parameters
 forecasters = ['rfhw','_hw','_relm']
 n =0
 n_pool = 3
-n_days = 3
+n_days = 2
 n_forecasters = len(forecasters)
 
 KPI_det = np.zeros((n_pool,n_pool,6,n_forecasters))
@@ -145,7 +145,7 @@ for fore in forecasters:
                 n_steps = y_te.shape[0]
                 P_obs = y_te[:,[0]]
                 t0=time()
-                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=False)
+                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=True)
                 dt_stoc = time()-t0
                 t1=time()
                 history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre= pre_batt.do_mpc(n_steps, P_obs,do_plots=False)

@@ -311,7 +311,7 @@ class BatteryController:
         p_buy = self.pars['pb']
         p_sell = self.pars['ps']
         n_n = len(g.nodes)
-        node_set = np.linspace(0,n_n-1,n_n,dtype=int)
+        #node_set = np.linspace(0,n_n-1,n_n,dtype=int)
         x = cvx.Variable((n_n ,1))
         y = cvx.Variable((n_n, 1))
         u = cvx.Variable((n_n, 2))
@@ -320,6 +320,7 @@ class BatteryController:
         x_start = cvx.Parameter(1)
         # probabilities vector
         all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+        self.all_t = all_t
         n_scen_1 = np.sum(all_t == 1)
         pm0 = cvx.Parameter((n_scen_1,1))
         if np.size(self.Ad) > 1:
@@ -327,24 +328,27 @@ class BatteryController:
         #weights = np.ones((1,len(all_t)))
         else:
             weights = np.ones((1,len(self.pars['ts'])))
-        t = np.unique(all_t)
-        leafs = np.array([ n  for n in  node_set[all_t==np.max(t)]])
+            #t = np.unique(all_t)
+        #leafs = np.array([ n  for n in  node_set[all_t==np.max(t)]])
+        scen_idx,leafs = self.retrieve_scenarios_indexes(g)
         x_leafs = cvx.Variable((len(leafs), 1))
 
         constraints = [x[1:] <= self.x_u]
         constraints.append(x[1:] >= self.x_l)
         constraints.append(x_leafs<= self.x_u)
         constraints.append(x_leafs>= self.x_l)
-        scen_idxs_hist = np.zeros((max(t)+1,len(leafs)),dtype=int)
+        #scen_idxs_hist = np.zeros((max(t)+1,len(leafs)),dtype=int)
         for s in np.arange(len(leafs)):
-            scen_idxs = np.sort(np.array(list(nx.ancestors(g, leafs[s]))))
-            scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
-            scen_idxs_hist[:,s] = scen_idxs
+            #scen_idxs = np.sort(np.array(list(nx.ancestors(g, leafs[s]))))
+            #scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
+            #scen_idxs_hist[:,s] = scen_idxs
+            scen_idxs = scen_idx[:,s]
             if np.size(self.Ad) > 1:
                 constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == np.diag(self.Ad) * x[scen_idxs] + cvx.reshape(cvx.sum(cvx.multiply(u[scen_idxs,:] , self.Bd),1),(len(self.Bd),1)))  #cvx.reshape(cvx.diag(u[scen_idxs,:] * self.Bd.T), (len(self.Ad), 1)))
                 #constraints.append(x[scen_idxs[1:]] == np.diag(self.Ad[0:-1]) * x[scen_idxs[0:-1]] + cvx.reshape(cvx.diag(u[scen_idxs[0:-1],:] * self.Bd.T[:,:-1]), (len(self.Ad)-1, 1)))
             else:
                 constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == self.Ad * x[scen_idxs] + u[scen_idxs,:] * self.Bd.T)
+
 
         constraints.append(u[:, 0] >= 0)
         constraints.append(u[:, 1] >= 0)
@@ -362,10 +366,10 @@ class BatteryController:
 
         #batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
         batt_punish = dsch_punish * cvx.multiply(p.T,u[:, [1]])
-        #ref_punish = k * (cvx.multiply(p, weights)) * (u[:, [0]] - u[:, [1]] + pm - ref) ** 2
-        ref_punish = k * (cvx.multiply(p[[0],1:],weights[[0],1:])) * (u[1:, [0]] - u[1:, [1]] + pm[1:] - ref[1:])**2
-        for i in np.arange(n_scen_1):
-            ref_punish += k * weights[0,0]*(u[0, [0]] - u[0, [1]] + pm0[i,0] - ref[0])**2/n_scen_1
+        ref_punish = k * (cvx.multiply(p, weights)) * (u[:, [0]] - u[:, [1]] + pm - ref) ** 2
+        #ref_punish = k * (cvx.multiply(p[[0],1:],weights[[0],1:])) * (u[1:, [0]] - u[1:, [1]] + pm[1:] - ref[1:])**2
+        #for i in np.arange(n_scen_1):
+        #    ref_punish += k * weights[0,0]*(u[0, [0]] - u[0, [1]] + pm0[i,0] - ref[0])**2/n_scen_1
         cost = cvx.multiply(p,weights) * y + ref_punish #+ batt_punish
 
        # for i in np.arange(n_n):
@@ -394,33 +398,155 @@ class BatteryController:
         self.u_st = u
         self.x_st = x
         self.dsch_punish_st = dsch_punish
-        self.scen_idxs = scen_idxs_hist
+        self.scen_idxs = np.copy(scen_idx)
         self.pm0 = pm0
+    def cvx_stochastic_solver(self, k,g,x_start,ref,pm0):
+        """
+        Define the CVX solver
+        :param k: sum_squares factor
+        :type k: float
+        """
+        p_buy = self.pars['pb']
+        p_sell = self.pars['ps']
+        n_n = len(g.nodes)
+        #node_set = np.linspace(0,n_n-1,n_n,dtype=int)
+        x = cvx.Variable((n_n ,1))
+        y = cvx.Variable((n_n, 1))
+        u = cvx.Variable((n_n, 2))
+        # probabilities vector
+        all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+        pm = np.array(list(nx.get_node_attributes(g, 'v').values()))
+        p = np.array(list(nx.get_node_attributes(g, 'p').values())).reshape(1,-1)
+        self.all_t = all_t
+        n_scen_1 = np.sum(all_t == 1)
+        if np.size(self.Ad) > 1:
+            weights = np.array([self.pars['ts'][i] for i in all_t]).reshape(1,-1)/900/96
+        #weights = np.ones((1,len(all_t)))
+        else:
+            weights = np.ones((1,len(self.pars['ts'])))
+            #t = np.unique(all_t)
+        #leafs = np.array([ n  for n in  node_set[all_t==np.max(t)]])
+        scen_idx,leafs = self.retrieve_scenarios_indexes(g)
+        x_leafs = cvx.Variable((len(leafs), 1))
+
+        constraints = [x[1:] <= self.x_u]
+        constraints.append(x[1:] >= self.x_l)
+        constraints.append(x_leafs<= self.x_u)
+        constraints.append(x_leafs>= self.x_l)
+        #scen_idxs_hist = np.zeros((max(t)+1,len(leafs)),dtype=int)
+        for s in np.arange(len(leafs)):
+            #scen_idxs = np.sort(np.array(list(nx.ancestors(g, leafs[s]))))
+            #scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
+            #scen_idxs_hist[:,s] = scen_idxs
+            scen_idxs = scen_idx[:,s]
+            if np.size(self.Ad) > 1:
+                constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == np.diag(self.Ad) * x[scen_idxs] + cvx.reshape(cvx.sum(cvx.multiply(u[scen_idxs,:] , self.Bd),1),(len(self.Bd),1)))  #cvx.reshape(cvx.diag(u[scen_idxs,:] * self.Bd.T), (len(self.Ad), 1)))
+                #constraints.append(x[scen_idxs[1:]] == np.diag(self.Ad[0:-1]) * x[scen_idxs[0:-1]] + cvx.reshape(cvx.diag(u[scen_idxs[0:-1],:] * self.Bd.T[:,:-1]), (len(self.Ad)-1, 1)))
+            else:
+                constraints.append(cvx.vstack((x[scen_idxs[1:]],x_leafs[[s]])) == self.Ad * x[scen_idxs] + u[scen_idxs,:] * self.Bd.T)
+
+
+        constraints.append(u[:, 0] >= 0)
+        constraints.append(u[:, 1] >= 0)
+        constraints.append(x[1:] <= self.x_u)
+        constraints.append(x[1:] >= self.x_l)
+
+        constraints.append(u[:, 0] <= self.E_0 * self.pars['C'])
+        constraints.append(u[:, 1] <= self.E_0 * self.pars['C'])
+        constraints.append(y >= p_buy * (pm + u[:, [0]] - u[:, [1]]))
+        constraints.append(y >= p_sell * (pm + u[:, [0]] - u[:, [1]]))
+        constraints.append(x[0] == x_start)
+        # eco_cost = ct * (pm + (u[0] - u[1]))
+        dsch_punish = cvx.Parameter((1,n_n))
+
+        #batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
+        #batt_punish = dsch_punish * cvx.multiply(p.T,u[:, [1]])
+        init_stdv = False
+        if init_stdv:
+            ref_punish = k * (cvx.multiply(p[[0], 1:], weights[[0], 1:])) * (
+                        u[1:, [0]] - u[1:, [1]] + pm[1:] - ref[1:]) ** 2
+            for i in np.arange(n_scen_1):
+                ref_punish += k * weights[0, 0] * (u[0, [0]] - u[0, [1]] + pm0[i] - ref[0]) ** 2 / n_scen_1
+        else:
+            ref_punish = k * (cvx.multiply(p, weights)) * (u[:, [0]] - u[:, [1]] + pm - ref) ** 2
+        cost = cvx.multiply(p,weights) * y + ref_punish #+ batt_punish
+
+       # for i in np.arange(n_n):
+        #     #u_punish = 1e-6 * p[0,i] * ((u[i, [0]])**2 + (u[i, [1]])**2 )
+        #    ref_punish =  k * p[0,i] * (u[i, [0]] - u[i, [1]] + pm[i] - ref[i])**2
+        #    cost += ref_punish #+ u_punish
+
+        #u_punish = 1e-6*(cvx.sum_squares(cvx.diag(p.T)*u[:,[0]])+cvx.sum_squares(cvx.diag(p.T)*u[:,[1]]))
+        #cost = p*y + dsch_punish*cvx.diag(p)*u[:,1] + k*cvx.sum_squares(cvx.diag(p.T)*(u[:, [0]] - u[:, [1]] +pm -ref)) + u_punish
+
+        #cost = cvx.sum(y) + k * cvx.sum_squares((u[:, [0]] - u[:, [1]] + pm - ref))
+        #D = np.zeros((self.h+1, 2 * n_n))
+        #for i in np.arange(self.h+1):
+        #    D[i, i * 2: 2 * (i + 1)] = [1, -1]
+        #cost = k*cvx.sum_squares(D*cvx.reshape(u.T,(n_n*2,1))-ref)
+
+        # peak_cost = cvx.square(pm + (u[0]-u[1]))
+        obj = cost
+        prob = cvx.Problem(cvx.Minimize(obj), constraints)
+        prob.solve()
+        self.pm_st.value = pm
+        self.p_st.value = p
+        self.ref_st.value =ref
+        self.x_start.value = x_start
+        self.u_st.value = u.value
+        self.x_st.value = x.value
+        self.scen_idxs = scen_idx
 
     def solve_step(self,time,ref=None,coord=False):
 
         #P_hat = self.P_hat
         if self.pars['type'] in ['stochastic','dist_stoc']:
+
             if self.P_hat is None:
                 self.P_hat, Ss, Pm0 = self.forecaster.predict_scenarios(time)
+                scen_idx, leafs = self.retrieve_scenarios_indexes(self.P_hat)
+                '''
+                pm_values = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+                p_values = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values()))
+                times = np.array(list(nx.get_node_attributes(self.P_hat, 't').values()))
+                pm_reordered = 0*np.copy(pm_values)
+                p_reordered = 0*np.copy(p_values)
+                for i in np.arange(scen_idx.shape[1]):
+                    current_scen = pm_values[scen_idx[:,i]]
+                    pm_reordered[self.scen_idxs[:,i]] = current_scen
+
+                    current_scen_p = p_values[scen_idx[:, i]]
+                    p_reordered[self.scen_idxs[:, i]] = current_scen_p
                 self.pm0.value = Pm0.reshape(-1,1)
+                all_t = np.array(list(nx.get_node_attributes(self.P_hat, 't').values()))
+
             # P must be a networkx graph
             # default reference does peak shaving
-            if ref is None:
-                #ref = -np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
-                ref = np.zeros((len(self.P_hat),1))
+
             try:
-                self.p_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)
+                self.p_st.value = p_reordered.reshape(1,-1)
             except:
                 print('vacca maiala',np.shape(np.array(list(nx.get_node_attributes(self.P_hat, 'p').values())).reshape(1,-1)),np.shape(self.p_st.value))
-            self.pm_st.value = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
+
+            if ref is None:
+                ref = np.zeros((len(self.P_hat), 1))
+
+            #self.scen_idxs = scen_idx
+            self.pm_st.value = pm_reordered
             self.ref_st.value = ref
-            self.dsch_punish_st.value = 100*(np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))<ref).T
+            self.dsch_punish_st.value = 100*(pm_reordered<ref).T
+
             try:
-                solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=True)
+                solution = self.cvx_solver_st.solve(solver = 'ECOS',warm_start=False)
             except:
-                solution = self.cvx_solver_st.solve(solver='SCS', warm_start=True)
+                solution = self.cvx_solver_st.solve(solver='SCS', warm_start=False)
                 print('revert to SCS solver')
+            '''
+
+            if ref is None:
+                ref = np.zeros((len(self.P_hat), 1))
+
+            self.cvx_stochastic_solver(self.k, self.P_hat, self.x_start.value, ref,Pm0)
 
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(
@@ -429,7 +555,6 @@ class BatteryController:
                 self.x_start.value = self.Ad[0] * self.x_start.value + self.Bd[[0],:].dot(self.u_st.value[0,:].reshape(-1, 1)).flatten()
 
             U = self.u_st.value
-            p_battery_0 = self.u_st.value[0, 0] - self.u_st.value[0, 1]
             P_hat = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
             SOC = self.x_st.value
 
@@ -438,7 +563,6 @@ class BatteryController:
                 self.P_hat,quantiles, y_i = self.forecaster.predict(time)
             # default reference does peak shaving
             if ref == None:
-                #ref = -self.P_hat
                 ref = np.zeros((self.P_hat.shape[0],1))
             self.pm.value = self.P_hat
             if self.pars['type'] == 'peak_shaving':
@@ -457,7 +581,6 @@ class BatteryController:
                 self.x_start.value = self.Ad[0] * self.x_start.value + self.Bd[[0],:].dot(self.u.value[0,:].reshape(-1, 1)).flatten()
 
             U = self.u.value
-            p_battery_0 = self.u.value[0, 0] - self.u.value[0, 1]
             P_hat = self.P_hat
             SOC = self.x.value
 
@@ -491,7 +614,18 @@ class BatteryController:
         p_set = self.u_batch[0,0] - self.u_batch[0,1]
         return p_set
 
-
+    def retrieve_scenarios_indexes(self,g):
+        n_n = len(g.nodes)
+        node_set = np.linspace(0,n_n-1,n_n,dtype=int)
+        all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+        t = np.unique(all_t)
+        leafs = np.array([n for n in node_set[all_t == np.max(t)]])
+        scen_idxs_hist = np.zeros((max(t)+1,len(leafs)),dtype=int)
+        for s in np.arange(len(leafs)):
+            scen_idxs = np.sort(np.array(list(nx.ancestors(g, leafs[s]))))
+            scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
+            scen_idxs_hist[:,s] = scen_idxs
+        return scen_idxs_hist,leafs
 
 class Batch:
     def __init__(self, controller):
@@ -720,3 +854,4 @@ class Batch:
         self.controller.x_mat = x
         self.controller.l_mat = l
         self.controller.b_mat = b
+
