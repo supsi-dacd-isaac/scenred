@@ -42,8 +42,12 @@ for s in np.arange(N_steps.shape[0]):
         ss = int(ss)
 
     # define step sizes
-    dt = steps*60*15
-    h = N_steps[s]
+    if s==N_steps.shape[0]:
+        dt = 60 * 15
+        h = 96
+    else:
+        dt = steps*60*15
+        h = N_steps[s]
     pars = {'h': h,
             'ts': np.atleast_1d(dt),
             'ps': 0.07,
@@ -97,7 +101,8 @@ for s in np.arange(N_steps.shape[0]):
                 t1 = time()
                 pre_batt = battery.Battery(dataset=data_pre, pars=pars, c_nom=c, cap_nom=cap)
                 history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre = pre_batt.do_mpc(n_steps, P_hat[:,[0]],
-                                                                                                      do_plots=False)
+                                                                                             do_plots=False)
+                '''  
                 fig, ax = plt.subplots(1)
                 ax.clear()
                 ax.plot(history_pre['P_obs'],label='observed')
@@ -106,7 +111,7 @@ for s in np.arange(N_steps.shape[0]):
                 fig.canvas.draw()
                 fig.canvas.flush_events()
                 plt.show()
-
+'''
                 KPI_c[i, j, s, f] = np.sum(cost_pre)/4 # transform in $/kWh
                 KPI_s[i, j, s, f] = np.sum(peak_sh_pre)
                 KPI[i, j, s, f] = np.sum(cost_pre) + np.sum(peak_sh_pre)
@@ -121,4 +126,4 @@ results['KPI_c'] = KPI_c
 results['KPI_s'] = KPI_s
 results['times'] = times
 
-np.save('results/a_priori_results', results)
+np.save('results/a_priori_results_2', results)

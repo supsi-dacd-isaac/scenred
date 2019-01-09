@@ -15,7 +15,7 @@ from time import time
 
 np.random.seed(0)
 
-filename = '/home/lorenzo/Documents/ISAAC_mat_svn/BB_forecasting/hierarchical_forecast/Data/base_forecasters_control.mat'
+filename = '/home/queen/Documents/ISAAC_matlab_svn/BB_forecasting/hierarchical_forecast/Data/base_forecasters_control.mat'
 f = h5py.File(filename, 'r')
 
 # parameters
@@ -124,8 +124,8 @@ for fore in forecasters:
                 'type':'stochastic',
                 'alpha':1,
                 'rho':1,
-                'n_final_scens':20,
-                'n_init_scens':10}
+                'n_final_scens':30,
+                'n_init_scens':20}
 
         for i in np.arange(n_pool):
             for j in np.arange(n_pool):
@@ -145,13 +145,14 @@ for fore in forecasters:
                 n_steps = y_te.shape[0]
                 P_obs = y_te[:,[0]]
                 t0=time()
-                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=True)
+                history_stoc, cost_stoc, peak_sh_stoc, cost_real_stoc, peak_sh_real_stoc= stoc_batt.do_mpc(n_steps,P_obs,do_plots=False)
                 dt_stoc = time()-t0
                 t1=time()
                 history_pre, cost_pre, peak_sh_pre, cost_real_pre, peak_sh_real_pre= pre_batt.do_mpc(n_steps, P_obs,do_plots=False)
                 dt_pre = time() - t1
                 history_det, cost_det, peak_sh_det, cost_real_det, peak_sh_real_det = det_batt.do_mpc(n_steps, P_obs,do_plots=False)
 
+                '''
                 fig, ax = plt.subplots(2)
                 ax[0].clear()
                 ax[1].clear()
@@ -169,7 +170,7 @@ for fore in forecasters:
                 fig.canvas.flush_events()
                 plt.show()
                 plt.pause(2)
-
+                '''
                 # retrieve KPIs
                 KPI_det[i, j,k,f_counter]  = np.sum(cost_det + peak_sh_det)
                 KPI_stoc[i, j,k,f_counter] = np.sum(cost_stoc + peak_sh_stoc)
@@ -226,5 +227,5 @@ for fore in forecasters:
     results['dt_stoc'] = times_stoc
     results['dt_pre'] = times_pre
 
-    np.save('results/results_10_20', results)
+    np.save('results/results_20_30_init', results)
 

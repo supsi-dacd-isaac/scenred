@@ -285,7 +285,7 @@ class BatteryController:
             dsch_punish = cvx.Parameter((1,self.Tcvx.shape[0]))
             #u_punish = 1e-6 * cvx.sum_squares(u)
             #cost = one_v * y + dsch_punish*u[:,1] + k*cvx.sum_squares(self.Tcvx*cvx.reshape(u.T,(H*2,1))+pm-ref)
-            cost = one_v * y + dsch_punish * u[:, 1] + k * one_v * ((u[:,[0]]-u[:,[1]] + pm - ref)**2)
+            cost = one_v * y  + k * one_v * ((u[:,[0]]-u[:,[1]] + pm - ref)**2) #+ dsch_punish * u[:, 1]
         else:
             raise TypeError('pars["type"] not recognized')
 
@@ -488,7 +488,11 @@ class BatteryController:
         # peak_cost = cvx.square(pm + (u[0]-u[1]))
         obj = cost
         prob = cvx.Problem(cvx.Minimize(obj), constraints)
-        prob.solve()
+        try:
+            prob.solve(solver='ECOS')
+        except:
+            prob.solve(solver='SCS')
+
         self.pm_st.value = pm
         self.p_st.value = p
         self.ref_st.value =ref
