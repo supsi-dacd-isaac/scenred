@@ -21,8 +21,10 @@ f = h5py.File(filename, 'r')
 # parameters
 forecasters = ['rfhw','_hw','_relm']
 n =0
-n_pool = 3
+n_pool = 1
 n_days = 2
+n_final_scen = 20
+n_init_scen = 1
 n_forecasters = len(forecasters)
 
 KPI_det = np.zeros((n_pool,n_pool,6,n_forecasters))
@@ -100,8 +102,11 @@ for fore in forecasters:
 
         #c_pool = np.linspace(0.5, 2, n_pool)
         #cap_pool = np.linspace(0.5, 2, n_pool)*e_out_daily
-        c_pool = np.array([0.5, 1, 1.5])
-        cap_pool = np.array([0.5, 1, 1.5])*e_out_daily
+        #c_pool = np.array([0.5, 1, 1.5])
+        #cap_pool = np.array([0.5, 1, 1.5]) * e_out_daily
+        c_pool = np.array([1])
+        cap_pool = np.array([1]) * e_out_daily
+
         # plot some data
         '''
         fig,ax = plt.subplots(1)
@@ -124,8 +129,8 @@ for fore in forecasters:
                 'type':'stochastic',
                 'alpha':1,
                 'rho':1,
-                'n_final_scens':30,
-                'n_init_scens':20}
+                'n_final_scens':n_final_scen,
+                'n_init_scens':n_init_scen}
 
         for i in np.arange(n_pool):
             for j in np.arange(n_pool):
@@ -227,5 +232,5 @@ for fore in forecasters:
     results['dt_stoc'] = times_stoc
     results['dt_pre'] = times_pre
 
-    np.save('results/results_20_30_init', results)
+    np.save('results/results_' + str(n_init_scen)+'_'+ str(n_final_scen) , results)
 

@@ -178,14 +178,15 @@ def plot_scen(S_s,y=None):
         if y is not None:
             ax.plot(np.arange(S_s.shape[0]),y[:,0],y[:,1],linewidth=1.5)
     elif S_s.shape[2]==1:
-        fig = plt.figure()
+        fig,ax = plt.subplots(1)
         plt.plot(np.squeeze(S_s),color='k', alpha=0.1)
         if y is not None:
             plt.plot(y, linewidth=1.5)
     else:
         assert S_s.shape[2]>2, 'Error: cannot visualize more than bivariate scenarios'
+    return fig,ax
 
-def plot_graph(g):
+def plot_graph(g,ax=None):
     '''
     Plot the networkx graph which encodes the scenario tree
     :param g: the networkx graph which encodes the scenario tree
@@ -193,12 +194,13 @@ def plot_graph(g):
     '''
 
     # get unique groups
-    fig= plt.figure()
-    ax =plt.gca()
+    if ax is None:
+        fig= plt.figure()
+        ax =plt.gca()
     groups = set(np.array(list(nx.get_node_attributes(g, 'v').values()))[:, 0])
     mapping = dict(zip(sorted(groups), count()))
     nodes = g.nodes()
-    colors = [mapping[g.node[n]['v'][0]] for n in nodes]
+    colors = [g.node[n]['v'][0] for n in nodes]
     p = np.array(list(nx.get_node_attributes(g, 'p').values()))
 
     # drawing nodes and edges separately so we can capture collection for colobar
@@ -206,9 +208,11 @@ def plot_graph(g):
     # nx.draw_networkx(g,pos,with_labels=True)
     ec = nx.draw_networkx_edges(g, pos, alpha=0.2)
     nc = nx.draw_networkx_nodes(g, pos, nodelist=nodes, node_color=colors,
-                                with_labels=True, node_size=100*p, cmap=plt.cm.jet)
+                                with_labels=True, node_size=100*p, cmap=plt.cm.magma)
     ax.set_xticks([])
     ax.set_yticks([])
+    cb = plt.colorbar(nc)
+    return ax,cb
 
 def get_network(S_s,P_s):
     '''
