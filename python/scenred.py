@@ -1,5 +1,5 @@
 import numpy as np
-from scipy.spatial.distance import pdist,squareform
+from scipy.spatial.distance import pdist,squareform,cdist
 import matplotlib
 matplotlib.use('Qt5Agg')
 import matplotlib.pyplot as plt
@@ -9,7 +9,7 @@ from networkx.drawing.nx_agraph import graphviz_layout
 import networkx as nx
 import warnings
 from itertools import count
-
+import copy
 
 def get_dist(X,metric):
     D = squareform(pdist(X,metric))
@@ -58,7 +58,7 @@ def scenred(samples, **kwargs):
     pars = {'nodes':defaultNodes,
             'tol': 10,
             'metric':'cityblock'}
-    for key in ('nodes','tol'):
+    for key in ('nodes','tol','metric'):
         if key in kwargs:
             pars[key] = kwargs[key]
     # Obtain the observation matrix, size (n*T) x n_obs, from which to compute distances. Normalize observations
@@ -214,6 +214,15 @@ def plot_graph(g,ax=None):
     cb = plt.colorbar(nc)
     return ax,cb
 
+def plot_from_graph(g):
+    f = plt.figure()
+    s_idx, leaves = retrieve_scenarios_indexes(g)
+    values = np.array(list(nx.get_node_attributes(g, 'v').values()))
+    cmap = plt.get_cmap('Set1')
+    line_colors = cmap(np.arange(3))
+    for s in np.arange(s_idx.shape[1]):
+        plt.plot(values[s_idx[:,s]],color=line_colors[0,:],linewidth=1,alpha = 1)
+
 def get_network(S_s,P_s):
     '''
     Get a network representation from the S_s and P_p matrices. The network is encoded in a networkx graph, each node
@@ -274,3 +283,102 @@ def get_network(S_s,P_s):
 
 def scenario_warning(message):
     warnings.warn(message)
+
+def set_distance(alphas,samples,metric):
+    D = np.zeros((samples.shape[0],alphas.shape[0]))
+    for i in np.arange(alphas.shape[0]):
+        D[:,[i]] = cdist(samples,alphas[[i],:],metric=metric)
+    #d = np.sum(np.minimum(D,0))
+    d = np.sum(np.min(D, 1))
+    return d,D
+
+def retrieve_scenarios_indexes(g):
+    n_n = len(g.nodes)
+    node_set = np.linspace(0,n_n-1,n_n,dtype=int)
+    all_t = np.array(list(nx.get_node_attributes(g, 't').values()))
+    t = np.unique(all_t)
+    leafs = np.array([n for n in node_set[all_t == np.max(t)]])
+    scen_idxs_hist = np.zeros((max(t)+1,len(leafs)),dtype=int)
+    for s in np.arange(len(leafs)):
+        scen_idxs = np.sort(np.array(list(nx.ancestors(g, leafs[s]))))
+        scen_idxs = np.asanyarray(np.insert(scen_idxs, len(scen_idxs),leafs[s],0),int)
+        scen_idxs_hist[:,s] = scen_idxs
+    return scen_idxs_hist,leafs
+
+def refine_scenarios(g,samples,metric):
+    n_random = 20
+    times = np.array(list(nx.get_node_attributes(g, 't').values()))
+    # get values, filtered by current time
+    values = np.array(list(nx.get_node_attributes(g, 'v').values()))
+    d_history = []
+    g_new = copy.deepcopy(g)
+    for t in np.arange(len(np.unique(times))):
+        alphas_t = values[times==t]
+        node_list = np.array(list(g.nodes))[times==t]
+        samples_t = samples[t,:,:]
+        d,Dummy = set_distance(alphas_t,samples_t,metric)
+        d_history.append(d)
+        if t==0:
+            alphas_t = np.atleast_2d(np.median(samples_t,0))
+        else:
+            D = squareform(pdist(alphas_t))
+            D = D+np.eye(D.shape[0]) * (1 + np.max(D.ravel()))
+            k_renorm = np.mean(np.min(D,0))/2
+            # for all the alpha points
+            for i in np.arange(alphas_t.shape[0]):
+                new_alphas = alphas_t[i,:] + k_renorm*np.random.randn(n_random,alphas_t.shape[1])
+                # for all the new candidates of each alpha point
+                for j in np.arange(new_alphas.shape[0]):
+                    alphas_test_set = np.copy(alphas_t)
+                    alphas_test_set[i] = new_alphas[j]
+                    d_new,Dummy = set_distance(alphas_test_set, samples_t,metric)
+                    if d_new<d:
+                        alphas_t[i] = new_alphas[j]
+                        d = d_new
+        d,D = set_distance(alphas_t, samples_t,metric)
+        p_vect = np.bincount(np.argmin(D,1),np.ones(D.shape[0],dtype=int))/D.shape[0]
+
+        for i in np.arange(len(node_list)):
+            g_new.nodes[node_list[i]]['v'] = np.array(alphas_t[i,:])
+            #g_new.nodes[node_list[i]]['p'] = np.array(p_vect[i])
+
+    d_history_new = []
+    values = np.array(list(nx.get_node_attributes(g_new, 'v').values()))
+    for t in np.arange(len(np.unique(times))):
+        alphas_t = np.array(values[times == t]).reshape(-1,np.size(values[0]))
+        samples_t = samples[t, :, :]
+        d,Dummy = set_distance(alphas_t, samples_t,metric)
+        d_history_new.append(d)
+    d_history = np.array(d_history).reshape(-1,1)
+    d_history_new = np.array(d_history_new).reshape(-1, 1)
+
+    # total distance, before and after
+    distances = np.hstack([d_history, d_history_new])
+
+    '''
+    s_idx,leaves = retrieve_scenarios_indexes(g)
+    s_idx_new, leaves_new = retrieve_scenarios_indexes(g_new)
+    p = np.array(list(nx.get_node_attributes(g, 'p').values()))
+    p_new = np.array(list(nx.get_node_attributes(g_new, 'p').values()))
+    for s in np.arange(s_idx.shape[1]):
+        plt.plot(p[s_idx[:,s]],'k')
+        plt.plot(p_new[s_idx_new[:, s]],'b--')
+    '''
+    '''
+    # do plots
+    f = plt.figure()
+    s_idx,leaves = retrieve_scenarios_indexes(g)
+    s_idx_new,leaves_new = retrieve_scenarios_indexes(g_new)
+    values = np.array(list(nx.get_node_attributes(g, 'v').values()))
+    values_new = np.array(list(nx.get_node_attributes(g_new, 'v').values()))
+    cmap = plt.get_cmap('Set1')
+    line_colors = cmap(np.arange(3))
+    plt.plot(samples[:,:,0],alpha = 0.1)
+    for s in np.arange(s_idx.shape[1]):
+        plt.plot(values[s_idx[:,s]],color=line_colors[0,:],linewidth=1,alpha = 1)
+        plt.plot(values_new[s_idx_new[:, s]], color=line_colors[1, :], linewidth=1, alpha=1)
+    plt.plot(values[s_idx[:, s]], color=line_colors[0, :], linewidth=1, alpha=1, label='old')
+    plt.plot(values_new[s_idx_new[:, s]], color=line_colors[1, :], linewidth=1, alpha=1, label='new')
+    plt.legend()
+    '''
+    return g_new, distances

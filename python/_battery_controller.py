@@ -220,7 +220,7 @@ class BatteryController:
             if self.forecaster_type == 'online':
                 g,S_s = self.forecaster.predict_scenarios(0)
             elif self.forecaster_type == 'pre-trained':
-                g,S_s,Sinit = self.forecaster.predict_scenarios(time=0)
+                g,S_s,Sinit,p0 = self.forecaster.predict_scenarios(time=0)
             self.g = g
             self.build_stochastic_cvx_solver(k)
         else:
@@ -400,7 +400,7 @@ class BatteryController:
         self.dsch_punish_st = dsch_punish
         self.scen_idxs = np.copy(scen_idx)
         self.pm0 = pm0
-    def cvx_stochastic_solver(self, k,g,x_start,ref,pm0):
+    def cvx_stochastic_solver(self, k,g,x_start,ref,pm0,p_0):
         """
         Define the CVX solver
         :param k: sum_squares factor
@@ -461,12 +461,12 @@ class BatteryController:
 
         #batt_punish = dsch_punish * cvx.diag(cvx.multiply(p,weights)) * u[:, [1]]
         #batt_punish = dsch_punish * cvx.multiply(p.T,u[:, [1]])
-        init_stdv = False
+        init_stdv = True
         if init_stdv:
             ref_punish = k * (cvx.multiply(p[[0], 1:], weights[[0], 1:])) * (
                         u[1:, [0]] - u[1:, [1]] + pm[1:] - ref[1:]) ** 2
             for i in np.arange(n_scen_1):
-                ref_punish += k * weights[0, 0] * (u[0, [0]] - u[0, [1]] + pm0[i] - ref[0]) ** 2 / n_scen_1
+                ref_punish += p_0[i] * k * weights[0, 0] * (u[0, [0]] - u[0, [1]] + pm0[i] - ref[0]) ** 2
         else:
             ref_punish = k * (cvx.multiply(p, weights)) * (u[:, [0]] - u[:, [1]] + pm - ref) ** 2
         cost = cvx.multiply(p,weights) * y + ref_punish #+ batt_punish
@@ -507,7 +507,7 @@ class BatteryController:
         if self.pars['type'] in ['stochastic','dist_stoc']:
 
             if self.P_hat is None:
-                self.P_hat, Ss, Pm0 = self.forecaster.predict_scenarios(time)
+                self.P_hat, Ss, Pm0,p0 = self.forecaster.predict_scenarios(time)
                 scen_idx, leafs = self.retrieve_scenarios_indexes(self.P_hat)
                 '''
                 pm_values = np.array(list(nx.get_node_attributes(self.P_hat, 'v').values()))
@@ -550,7 +550,7 @@ class BatteryController:
             if ref is None:
                 ref = np.zeros((len(self.P_hat), 1))
 
-            self.cvx_stochastic_solver(self.k, self.P_hat, self.x_start.value, ref,Pm0)
+            self.cvx_stochastic_solver(self.k, self.P_hat, self.x_start.value, ref,Pm0,p0)
 
             if np.size(self.Ad)==1:
                 self.x_start.value = self.Ad * self.x_start.value + self.Bd.dot(

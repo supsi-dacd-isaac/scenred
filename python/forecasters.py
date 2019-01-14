@@ -1,5 +1,8 @@
 import numpy as np
-from scenred import scenred
+from scenred import scenred, refine_scenarios
+import copy
+from scipy.spatial.distance import cdist
+
 class RELM:
     '''
     RELM forecaster
@@ -281,14 +284,26 @@ class pre_trained_forecaster:
         return y_hat,None,None
 
     def predict_scenarios(self,time):
+        metric = 'euclidean'
         scen_t = np.squeeze(self.scenarios[time,:,:])
-        [S_s, P_s, J_s, Me_s, g] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric='cityblock',
+        [S_s, P_s, J_s, Me_s, g] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric=metric,
                                            nodes=self.scenarios_per_step)
+        #g,distances = refine_scenarios(copy.deepcopy(g),np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1),metric=metric)
+
         scen_t = np.vstack([scen_t[[0],:],scen_t])
         scenarios_per_step = np.insert(self.scenarios_per_step,1,self.scenarios_per_step[1])
-        [S_init, P_sn, J_sn, Me_sn, gn] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric='cityblock',
+        [S_init0, P_sn, J_sn, Me_sn, gn] = scenred(np.copy(scen_t).reshape(scen_t.shape[0],scen_t.shape[1],1), metric=metric,
                                            nodes=scenarios_per_step)
-        S_init = np.unique(S_init[1,:])
+        S_init = np.unique(S_init0[1,:])
+        d,D = set_distance(S_init.reshape(-1,1), scen_t[0,:].reshape(-1,1),metric)
+        p_vect = np.bincount(np.argmin(D,1),np.ones(D.shape[0],dtype=int))/D.shape[0]
 
-        return g, S_s, S_init
+        return g, S_s, S_init,p_vect
 
+def set_distance(alphas,samples,metric):
+    D = np.zeros((samples.shape[0],alphas.shape[0]))
+    for i in np.arange(alphas.shape[0]):
+        D[:,[i]] = cdist(samples,alphas[[i],:],metric=metric)
+    #d = np.sum(np.minimum(D,0))
+    d = np.sum(np.min(D, 1))
+    return d,D
